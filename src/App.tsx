@@ -1,14 +1,18 @@
-import { useState, useEffect } from 'react'
-import { supabase }   from './services/supabaseClient'
-import Login          from './pages/Login'
-import Dashboard      from './pages/Dashboard'
-import PublicMenu     from './pages/PublicMenu'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase }  from './services/supabaseClient'
+import Login         from './pages/Login'
+import Dashboard     from './pages/Dashboard'
+import PublicMenu    from './pages/PublicMenu'
 import type { Session } from '@supabase/supabase-js'
+
+// Ruta pública — evaluada una sola vez, fuera del componente
+const IS_PUBLIC_MENU = window.location.pathname.startsWith('/menu')
 
 function SplashScreen() {
   return (
     <div style={{
-      minHeight: '100vh', backgroundColor: '#D8DAE4',
+      minHeight: '100dvh',
+      backgroundColor: '#D8DAE4',
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', gap: '1.5rem',
       fontFamily: '"Nunito", sans-serif',
@@ -20,57 +24,91 @@ function SplashScreen() {
         <img src="/logo.jpg" alt="RestaurantOS"
           style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
       </div>
-      <div style={{ textAlign: 'center' }}>
-        <p style={{ color: '#2D3561', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '1.25rem' }}>
-          RestaurantOS
-        </p>
-        <div style={{
-          marginTop: '1rem', width: 24, height: 24, borderRadius: '50%',
-          border: '3px solid #E0E3EC', borderTopColor: '#FF5722',
-          animation: 'spin 0.8s linear infinite', margin: '1rem auto 0',
-        }} />
-      </div>
+      <p style={{ color: '#2D3561', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '1.25rem' }}>
+        RestaurantOS
+      </p>
+      <div style={{
+        width: 28, height: 28, borderRadius: '50%',
+        border: '3px solid #CDD0DC', borderTopColor: '#FF5722',
+        animation: 'spin 0.8s linear infinite',
+      }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
 
-// ── Router interno — resuelve ANTES de montar App ──────────────
-// Así no hay return condicional entre hooks (viola Rules of Hooks)
-const CURRENT_PATH = window.location.pathname
+// Componente independiente para la ruta /menu — no comparte estado con App
+function PublicMenuRoute() {
+  return <PublicMenu />
+}
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Todos los hooks SIEMPRE se ejecutan — sin returns condicionales entre ellos
+  // onLogin: no hace getSession() extra — deja que onAuthStateChange maneje todo
+  // Esto elimina la race condition en móvil
+  const handleLogin = useCallback(() => {
+    // onAuthStateChange ya va a disparar con la sesión nueva.
+    // No hacemos nada aquí — el estado se actualiza solo.
+  }, [])
+
   useEffect(() => {
-    // Ruta pública /menu no necesita auth check — pero igual corremos el hook
-    if (CURRENT_PATH === '/menu') {
+    // Si es ruta pública no necesitamos auth
+    if (IS_PUBLIC_MENU) {
       setLoading(false)
       return
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setLoading(false)
+    let isMounted = true
+
+    // 1. Obtener sesión actual (una sola vez, al montar)
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (isMounted) {
+        setSession(s)
+        setLoading(false)
+      }
+    }).catch(() => {
+      // En móvil getSession puede fallar si el storage no está listo
+      // — reintentar una vez después de 500ms
+      setTimeout(() => {
+        supabase.auth.getSession().then(({ data: { session: s } }) => {
+          if (isMounted) {
+            setSession(s)
+            setLoading(false)
+          }
+        }).catch(() => {
+          if (isMounted) setLoading(false)
+        })
+      }, 500)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s)
+    // 2. Escuchar cambios en tiempo real (login, logout, refresh token)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (isMounted) {
+        setSession(s)
+        // Si estábamos cargando y llega un evento, ya podemos mostrar la UI
+        setLoading(false)
+      }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
-  // Ruta pública — renderiza sin auth
-  if (CURRENT_PATH === '/menu') return <PublicMenu />
+  // Ruta pública: renderizar directamente sin auth
+  if (IS_PUBLIC_MENU) return <PublicMenuRoute />
 
   if (loading) return <SplashScreen />
 
-  return session
-    ? <Dashboard onLogout={() => supabase.auth.signOut()} />
-    : <Login onLogin={() =>
-        supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
-      } />
+  if (session) {
+    return <Dashboard onLogout={async () => {
+      await supabase.auth.signOut()
+      setSession(null)
+    }} />
+  }
+
+  return <Login onLogin={handleLogin} />
 }

@@ -44,10 +44,19 @@ export default function Login({ onLogin }: LoginProps) {
     setLoading(true)
     try {
       const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
-      if (err) { setError(getAuthError(err.code)); return }
+      if (err) {
+        setError(getAuthError(err.code))
+        setLoading(false)
+        return
+      }
+      // No llamar setLoading(false) aquí — App.tsx tomará el control
+      // al recibir el evento onAuthStateChange con la nueva sesión.
+      // onLogin() ya no hace nada — el estado de App se actualiza solo.
       onLogin()
-    } catch { setError('Error de conexión. Verifica tu internet') }
-    finally  { setLoading(false) }
+    } catch {
+      setError('Error de conexión. Verifica tu internet')
+      setLoading(false)
+    }
   }
 
   const handleForgot = async (e: FormEvent) => {

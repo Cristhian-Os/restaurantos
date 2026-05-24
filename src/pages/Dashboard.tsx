@@ -220,19 +220,55 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     const load = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error('No autenticado')
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-        if (error) throw error
-        if (isMounted.current) {
-          setProfile(data)
-          const defaultNav: Record<Role, NavView> = {
-            admin: 'dashboard', waiter: 'orders', kitchen: 'kitchen', cashier: 'cashier', client: 'menu'
+        if (!user) {
+          // No hay sesión — volver al login
+          if (isMounted.current) setLoading(false)
+          return
+        }
+
+        let { data: profile, error } = await supabase
+          .from('profiles').select('*').eq('id', user.id).single()
+
+        // Si el perfil no existe en la BD (PGRST116 = no rows), crearlo automáticamente
+        if (error && (error.code === 'PGRST116' || error.message?.includes('no rows'))) {
+          const { data: newProfile, error: insertError } = await supabase
+            .from('profiles')
+            .insert({
+              id:        user.id,
+              email:     user.email ?? '',
+              full_name: user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'Usuario',
+              role:      user.user_metadata?.role ?? 'waiter',
+              active:    true,
+            })
+            .select('*')
+            .single()
+
+          if (insertError) {
+            console.error('Error creando perfil:', insertError)
+            if (isMounted.current) setLoading(false)
+            return
           }
-          setActiveNav(defaultNav[data.role as Role])
+          profile = newProfile
+          error   = null
+        }
+
+        if (error || !profile) {
+          console.error('Error cargando perfil:', error)
+          if (isMounted.current) setLoading(false)
+          return
+        }
+
+        if (isMounted.current) {
+          setProfile(profile)
+          const defaultNav: Record<Role, NavView> = {
+            admin: 'dashboard', waiter: 'orders', kitchen: 'kitchen',
+            cashier: 'cashier', client: 'menu'
+          }
+          setActiveNav(defaultNav[profile.role as Role] ?? 'orders')
         }
       } catch (e) {
-        console.error(e)
-        message.error('Error cargando perfil')
+        console.error('Dashboard load error:', e)
+        // No mostrar error al usuario — simplemente dejar de cargar
       } finally {
         if (isMounted.current) setLoading(false)
       }
@@ -241,17 +277,30 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     return () => { isMounted.current = false }
   }, [])
 
-  if (loading || !profile) return (
+  // Si terminó de cargar pero no hay perfil → cerrar sesión y volver al login
+  if (!loading && !profile) {
+    supabase.auth.signOut().then(() => onLogout())
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#D8DAE4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '1rem' }}>
+        <p style={{ color: '#FF5722', fontWeight: 700, fontFamily: '"Nunito", sans-serif' }}>
+          Reiniciando sesión...
+        </p>
+      </div>
+    )
+  }
+
+  if (loading) return (
     <div style={{ minHeight: '100vh', backgroundColor: '#D8DAE4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center' }}>
-        {/* Logo de carga: w-16 h-16 rounded-3xl object-contain */}
-        <div style={{ width: '64px', height: '64px', borderRadius: '1.5rem', overflow: 'hidden', margin: '0 auto 1rem', animation: 'pulseSoft 1.5s ease infinite', ...S.neoOut }}>
+        <div style={{ width: '64px', height: '64px', borderRadius: '1.5rem', overflow: 'hidden', margin: '0 auto 1rem', ...S.neoOut }}>
           <img src="/logo.jpg" alt="RestaurantOS" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
         </div>
         <Spin size="large" />
       </div>
     </div>
   )
+
+  if (!profile) return null
 
   const navItems = NAV_BY_ROLE[profile.role] ?? NAV_BY_ROLE.client
 

@@ -3,16 +3,15 @@ import message from 'antd/es/message'  // FIX: static import, no require()
 
 export const pushNotificationService = {
   async initializePushNotifications(): Promise<void> {
-    if ('serviceWorker' in navigator) {
-      try {
-        const registration = await navigator.serviceWorker.register('/service-worker.js')
-        console.log('Service Worker registrado:', registration)
-      } catch (error) {
-        console.error('Error registrando Service Worker:', error)
+    // Service Worker ya se registra en main.tsx — no registrar de nuevo aquí
+    // Solo pedir permiso de notificaciones si el navegador lo soporta
+    try {
+      if ('Notification' in window && Notification.permission === 'default') {
+        // No bloquear el hilo principal con await — hacerlo en background
+        Notification.requestPermission().catch(() => {/* silencioso */})
       }
-    }
-    if ('Notification' in window && Notification.permission === 'default') {
-      await Notification.requestPermission()
+    } catch {
+      // iOS Safari puede lanzar excepción — ignorar silenciosamente
     }
   },
 
