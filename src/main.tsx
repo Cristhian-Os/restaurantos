@@ -3,52 +3,39 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { QueryClientProvider } from '@tanstack/react-query'
+import { ErrorBoundary } from './ErrorBoundary'
 import { queryClient } from './services/queryClient'
 
-// ── Registrar Service Worker con lógica de actualización inmediata ──
+// Registrar SW minimalista
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
-
-      // Detectar cuando hay un nuevo SW esperando
-      reg.addEventListener('updatefound', () => {
-        const newWorker = reg.installing
-        if (!newWorker) return
-
-        newWorker.addEventListener('statechange', () => {
-          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            // Hay una versión nueva lista — forzar activación inmediata
-            newWorker.postMessage({ type: 'SKIP_WAITING' })
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(reg => {
+        // Si hay un SW esperando activación, activarlo ahora
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+        }
+        reg.addEventListener('updatefound', () => {
+          const w = reg.installing
+          if (w) {
+            w.addEventListener('statechange', () => {
+              if (w.state === 'installed') {
+                w.postMessage({ type: 'SKIP_WAITING' })
+              }
+            })
           }
         })
       })
-
-      // Cuando el SW tome control, recargar la página para usar la versión nueva
-      let refreshing = false
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) {
-          refreshing = true
-          window.location.reload()
-        }
-      })
-
-      // Si ya hay un SW activo en espera, activarlo de inmediato
-      if (reg.waiting) {
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' })
-      }
-
-    } catch (err) {
-      // SW no disponible (desarrollo local, incógnito, etc.) — no es error crítico
-      console.warn('SW no disponible:', err)
-    }
+      .catch(() => {/* no crítico */})
   })
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>,
 )

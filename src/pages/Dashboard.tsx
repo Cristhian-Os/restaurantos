@@ -3,7 +3,7 @@
 // Mobile-first + estilos inline garantizados
 // ============================================================
 
-import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { useState, useEffect, useCallback, useRef, memo, Suspense, lazy } from 'react'
 import { supabase } from '../services/supabaseClient'
 import { initializeOfflineSync } from '../services/offlineService'
 import { pushNotificationService } from '../services/pushNotificationService'
@@ -11,20 +11,22 @@ import Spin    from 'antd/es/spin'
 import message from 'antd/es/message'
 import Tabs    from 'antd/es/tabs'
 
-import { OrderFlow }    from '../components/orders/OrderFlow'
-import { TableMap }     from '../components/tables/TableMap'
-import { KitchenBoard } from '../components/kitchen/KitchenBoard'
-import { CashierPanel } from '../components/cashier/CashierPanel'
-import { TeamManager }  from '../components/team/TeamManager'
-import { MenuManager }  from '../components/menu/MenuManager'
-import { ClientMenuSection }  from '../components/ClientMenuSection'
-import { AdminTasksView }     from '../components/tasks/AdminTasksView'
-import { EmployeeTasksView }  from '../components/tasks/EmployeeTasksView'
-import { ShoppingList }       from '../components/inventory/ShoppingList'
-import { RecipeBuilder }      from '../components/recipes/RecipeBuilder'
-import BusinessAssistant      from './BusinessAssistant'
-import { InstallPWA }         from '../components/pwa/InstallPWA'
-import { QRMenu }             from '../components/pwa/QRMenu'
+// Lazy loading — los componentes se cargan solo cuando se necesitan
+// Esto evita que un crash en un módulo pesado rompa toda la app en móvil
+const OrderFlow        = lazy(() => import('../components/orders/OrderFlow').then(m => ({ default: m.OrderFlow })))
+const TableMap         = lazy(() => import('../components/tables/TableMap').then(m => ({ default: m.TableMap })))
+const KitchenBoard     = lazy(() => import('../components/kitchen/KitchenBoard').then(m => ({ default: m.KitchenBoard })))
+const CashierPanel     = lazy(() => import('../components/cashier/CashierPanel').then(m => ({ default: m.CashierPanel })))
+const TeamManager      = lazy(() => import('../components/team/TeamManager').then(m => ({ default: m.TeamManager })))
+const MenuManager      = lazy(() => import('../components/menu/MenuManager').then(m => ({ default: m.MenuManager })))
+const ClientMenuSection= lazy(() => import('../components/ClientMenuSection').then(m => ({ default: m.ClientMenuSection })))
+const AdminTasksView   = lazy(() => import('../components/tasks/AdminTasksView').then(m => ({ default: m.AdminTasksView })))
+const EmployeeTasksView= lazy(() => import('../components/tasks/EmployeeTasksView').then(m => ({ default: m.EmployeeTasksView })))
+const ShoppingList     = lazy(() => import('../components/inventory/ShoppingList').then(m => ({ default: m.ShoppingList })))
+const RecipeBuilder    = lazy(() => import('../components/recipes/RecipeBuilder').then(m => ({ default: m.RecipeBuilder })))
+const BusinessAssistant= lazy(() => import('./BusinessAssistant'))
+const InstallPWA       = lazy(() => import('../components/pwa/InstallPWA').then(m => ({ default: m.InstallPWA })))
+const QRMenu           = lazy(() => import('../components/pwa/QRMenu').then(m => ({ default: m.QRMenu })))
 
 // ── Sombras neomórficas inline (independientes de Tailwind) ──
 const S = {
@@ -565,7 +567,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
              En desktop: la sidebar es sticky entonces el main scrollea dentro del flex. */
           minWidth: 0,  /* Previene overflow horizontal en flex */
         }}>
-          {renderContent()}
+          <Suspense fallback={
+            <div style={{ display:'flex', justifyContent:'center', alignItems:'center', padding:'3rem' }}>
+              <div style={{ width:28,height:28,borderRadius:'50%',border:'3px solid #CDD0DC',borderTopColor:'#FF5722',animation:'rs 0.8s linear infinite' }} />
+              <style>{'@keyframes rs{to{transform:rotate(360deg)}}'}</style>
+            </div>
+          }>
+            {renderContent()}
+          </Suspense>
           {/* Espacio inferior para que el contenido no quede pegado al borde */}
           <div style={{ height: '2rem' }} />
         </main>

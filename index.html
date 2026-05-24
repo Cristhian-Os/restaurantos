@@ -68,6 +68,35 @@
     </style>
   </head>
   <body>
+    <!-- SCRIPT DE EMERGENCIA: desregistra SWs viejos y limpia cachés -->
+    <!-- Se ejecuta síncronamente antes de que React cargue -->
+    <script>
+      (function() {
+        // Limpiar cachés de Service Worker de versiones anteriores
+        if ('caches' in window) {
+          caches.keys().then(function(keys) {
+            keys.forEach(function(key) {
+              if (key !== 'ros-v4') {
+                caches.delete(key);
+              }
+            });
+          });
+        }
+        // Desregistrar SWs viejos (que no sean /sw.js)
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            regs.forEach(function(reg) {
+              // Si el SW activo no es /sw.js, desregistrarlo
+              var swURL = reg.active ? reg.active.scriptURL : (reg.installing ? reg.installing.scriptURL : '');
+              if (swURL && !swURL.endsWith('/sw.js')) {
+                reg.unregister();
+              }
+            });
+          });
+        }
+      })();
+    </script>
+
     <div id="root">
       <!-- Splash nativo — visible antes de que React cargue (0ms delay) -->
       <div id="native-splash" style="position:fixed;inset:0;background:#D8DAE4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;font-family:Nunito,sans-serif;z-index:9999;">
