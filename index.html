@@ -11,6 +11,37 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="RestaurantOS" />
     <title>RestaurantOS</title>
+
+    <!-- Preconexión a Google Fonts (performance) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Fuentes cargadas directamente en el HTML — garantiza disponibilidad en Vercel -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Nunito:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Estilos base inline — garantizan el fondo neomórfico incluso si Tailwind falla -->
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body, #root {
+        min-height: 100vh;
+        background-color: #E8EAF0;
+        font-family: 'Nunito', ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        color: #2D3561;
+      }
+      /* Prevenir flash de fondo blanco */
+      body { background: #E8EAF0 !important; }
+      #root { background: #E8EAF0; }
+
+      /* Scrollbar neomórfico */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: #E8EAF0; border-radius: 10px; }
+      ::-webkit-scrollbar-thumb { background: rgba(163,177,198,0.7); border-radius: 10px; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
