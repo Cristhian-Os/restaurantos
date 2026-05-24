@@ -23,6 +23,7 @@ import { EmployeeTasksView }  from '../components/tasks/EmployeeTasksView'
 import { ShoppingList }       from '../components/inventory/ShoppingList'
 import { RecipeBuilder }      from '../components/recipes/RecipeBuilder'
 import BusinessAssistant      from './BusinessAssistant'
+import { InstallPWA }         from '../components/pwa/InstallPWA'
 
 // ── Sombras neomórficas inline (independientes de Tailwind) ──
 const S = {
@@ -146,6 +147,9 @@ const AdminDashboard = memo(({ profile, onNavigate }: { profile: Profile; onNavi
           {new Date().toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}
         </p>
       </div>
+
+      {/* Instalar como app */}
+      <InstallPWA />
 
       {/* Grid de métricas — 2 cols mobile, 3 cols desktop */}
       <div style={{
@@ -329,6 +333,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
         {/* Acciones header */}
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {/* Instalar PWA — compacto */}
+          <InstallPWA compact />
+
           {/* Botón hamburguesa — solo mobile */}
           <button
             onClick={() => setMobileOpen(p => !p)}

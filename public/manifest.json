@@ -1,0 +1,17 @@
+{
+  "name": "RestaurantOS",
+  "short_name": "RestaurantOS",
+  "description": "Sistema de gestión para restaurantes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E8EAF0",
+  "theme_color": "#FF5722",
+  "orientation": "any",
+  "icons": [
+    { "src": "/logo.jpg", "sizes": "192x192", "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/logo.jpg", "sizes": "512x512", "type": "image/jpeg", "purpose": "any maskable" }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "es",
+  "screenshots": []
+}
