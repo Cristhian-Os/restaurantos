@@ -19,13 +19,18 @@ const S = {
 } as const
 
 // Categorías — editables en tiempo de ejecución
-const DEFAULT_CATEGORIES: { value: DishCategory; label: string; emoji: string }[] = [
+interface Category { value: string; label: string; emoji: string }
+
+const DEFAULT_CATEGORIES: Category[] = [
   { value: 'entrada',   label: 'Entrada',   emoji: '🥗' },
   { value: 'principal', label: 'Principal', emoji: '🍽️' },
   { value: 'postre',    label: 'Postre',    emoji: '🍰' },
   { value: 'bebida',    label: 'Bebida',    emoji: '🥤' },
   { value: 'especial',  label: 'Especial',  emoji: '⭐' },
 ]
+
+// Lista de emojis para elegir al crear categoría
+const EMOJI_OPTIONS = ['🍕','🍔','🌮','🍣','🥗','🍰','🥤','☕','🍷','🥩','🍝','🥘','🍜','🥞','🧇','🍳','🥚','🥓','🌯','🥪','🍱','🧆','🧈','🫕','🫔','🍗','🍖','🥙','🫓','🥨','🧀','🥗','🫙','🍲','⭐','✨','🔥','💎','🏆','🎉','🎊','👑','💫']
 
 interface DishForm {
   name:        string
@@ -83,7 +88,7 @@ export const MenuManager = memo(() => {
   const [form,       setForm]      = useState<DishForm>(FORM_EMPTY)
   const [saving,     setSaving]    = useState(false)
   const [formError,  setFormError] = useState<string | null>(null)
-  const [filterCat,  setFilterCat] = useState<DishCategory | 'all'>('all')
+  const [filterCat,  setFilterCat] = useState<string>('all')
   const [search,     setSearch]    = useState('')
   // Nombre del establecimiento
   const [bizName,    setBizName]   = useState('')
@@ -93,8 +98,13 @@ export const MenuManager = memo(() => {
   const [tableCount, setTableCount] = useState('')
   const [savingTables, setSavingTables] = useState(false)
   // Categorías editables
-  const [categories, setCategories] = useState(DEFAULT_CATEGORIES)
-  const [editingCat, setEditingCat] = useState<DishCategory | null>(null)
+  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES)
+  // Nueva categoría
+  const [newCatLabel, setNewCatLabel] = useState('')
+  const [newCatEmoji, setNewCatEmoji] = useState('🍽️')
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [savingCat, setSavingCat] = useState(false)
+  const [editingCat, setEditingCat] = useState<string | null>(null)
   const [catLabel,   setCatLabel]   = useState('')
   const imageRef = useRef<HTMLInputElement>(null)
 
@@ -114,6 +124,11 @@ export const MenuManager = memo(() => {
         const modules = data?.modules_enabled as Record<string, unknown> | null
         if (modules && typeof modules['table_count'] === 'number') {
           setTableCount(String(modules['table_count']))
+        }
+        // Cargar categorías personalizadas guardadas
+        if (modules && Array.isArray(modules['categories'])) {
+          const saved = modules['categories'] as Category[]
+          if (saved.length > 0) setCategories(saved)
         }
       })
   }, [fetchDishes])
@@ -195,6 +210,49 @@ export const MenuManager = memo(() => {
     setDishes(prev => prev.filter(x => x.id !== d.id))
   }, [])
 
+  // Persistir categorías en Supabase
+  const persistCategories = async (cats: Category[]) => {
+    const { data: cfg } = await supabase.from('restaurant_config').select('id, modules_enabled').single()
+    if (!cfg) return
+    const modules = (cfg.modules_enabled as Record<string, unknown>) ?? {}
+    await supabase.from('restaurant_config')
+      .update({ modules_enabled: { ...modules, categories: cats } })
+      .eq('id', cfg.id)
+  }
+
+  // Crear nueva categoría
+  const handleAddCategory = async () => {
+    if (!newCatLabel.trim()) return
+    // Generar valor slug a partir del label
+    const value = newCatLabel.trim().toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')  // quitar acentos
+      .replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+      || `cat_${Date.now()}`
+    if (categories.find(c => c.value === value)) {
+      message.warning('Ya existe una categoría con ese nombre')
+      return
+    }
+    setSavingCat(true)
+    const newCat: Category = { value, label: newCatLabel.trim(), emoji: newCatEmoji }
+    const updated = [...categories, newCat]
+    setCategories(updated)
+    await persistCategories(updated)
+    setNewCatLabel('')
+    setNewCatEmoji('🍽️')
+    setSavingCat(false)
+    message.success(`Categoría "${newCat.label}" creada`)
+  }
+
+  // Eliminar categoría (solo si no tiene platos)
+  const handleDeleteCategory = async (value: string) => {
+    const inUse = dishes.some(d => d.category === value)
+    if (inUse) { message.warning('No puedes eliminar una categoría que tiene platos asignados'); return }
+    const updated = categories.filter(c => c.value !== value)
+    setCategories(updated)
+    await persistCategories(updated)
+    message.success('Categoría eliminada')
+  }
+
   // Guardar nombre del establecimiento
   const handleSaveBizName = async () => {
     if (!bizName.trim()) return
@@ -242,9 +300,11 @@ export const MenuManager = memo(() => {
   }
 
   // Guardar label de categoría
-  const handleSaveCatLabel = (catValue: DishCategory) => {
+  const handleSaveCatLabel = async (catValue: string) => {
     if (!catLabel.trim()) return
-    setCategories(prev => prev.map(c => c.value === catValue ? { ...c, label: catLabel.trim() } : c))
+    const updated = categories.map(c => c.value === catValue ? { ...c, label: catLabel.trim() } : c)
+    setCategories(updated)
+    await persistCategories(updated)
     setEditingCat(null)
     message.success('Categoría actualizada')
   }
@@ -330,12 +390,12 @@ export const MenuManager = memo(() => {
                 </div>
               </div>
 
-              {/* Categorías editables */}
+              {/* Categorías — editar existentes + crear nuevas */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#8B92AA' }}>
                   Categorías del menú
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
                   {categories.map(cat => (
                     <div key={cat.value} className="flex items-center gap-2 rounded-xl px-3 py-2"
                       style={{ backgroundColor: '#CDD0DC', ...S.neoIn }}>
@@ -354,11 +414,64 @@ export const MenuManager = memo(() => {
                         : <>
                             <span className="flex-1 text-sm font-bold text-[#2D3561]">{cat.label}</span>
                             <button onClick={() => { setEditingCat(cat.value); setCatLabel(cat.label) }}
-                              style={{ color: '#8B92AA', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem' }}>✏️</button>
+                              style={{ color: '#8B92AA', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem' }} title="Editar nombre">✏️</button>
+                            {/* Solo categorías personalizadas se pueden eliminar */}
+                            {!['entrada','principal','postre','bebida','especial'].includes(cat.value) && (
+                              <button onClick={() => handleDeleteCategory(cat.value)}
+                                style={{ color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem' }} title="Eliminar">🗑️</button>
+                            )}
                           </>
                       }
                     </div>
                   ))}
+                </div>
+
+                {/* Crear nueva categoría */}
+                <div className="rounded-xl p-3 space-y-2" style={{ backgroundColor: '#CDD0DC', ...S.neoIn }}>
+                  <p className="text-xs font-bold" style={{ color: '#8B92AA' }}>+ Nueva categoría</p>
+                  <div className="flex gap-2">
+                    {/* Selector de emoji */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowEmojiPicker(p => !p)}
+                        className="w-11 h-11 rounded-xl text-xl flex items-center justify-center"
+                        style={{ backgroundColor: '#D8DAE4', border: 'none', cursor: 'pointer', ...S.neoOutSm }}>
+                        {newCatEmoji}
+                      </button>
+                      {showEmojiPicker && (
+                        <div className="absolute top-12 left-0 z-50 rounded-2xl p-3 grid grid-cols-8 gap-1"
+                          style={{ backgroundColor: '#D8DAE4', ...S.neoOut, width: 240 }}>
+                          {EMOJI_OPTIONS.map(e => (
+                            <button key={e} onClick={() => { setNewCatEmoji(e); setShowEmojiPicker(false) }}
+                              className="w-8 h-8 rounded-lg text-lg hover:scale-110 transition-transform"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                              {e}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* Nombre */}
+                    <input
+                      value={newCatLabel}
+                      onChange={e => setNewCatLabel(e.target.value)}
+                      placeholder="Nombre de categoría"
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddCategory() }}
+                      className="flex-1 rounded-xl px-3 py-2 text-sm outline-none"
+                      style={{ backgroundColor: '#D8DAE4', color: '#2D3561', border: 'none', ...S.neoIn }} />
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleAddCategory}
+                      disabled={savingCat || !newCatLabel.trim()}
+                      className="px-3 py-2 rounded-xl text-sm font-bold text-white shrink-0"
+                      style={{
+                        backgroundColor: !newCatLabel.trim() ? '#CDD0DC' : '#FF5722',
+                        border: 'none', cursor: !newCatLabel.trim() ? 'not-allowed' : 'pointer',
+                        ...(!newCatLabel.trim() ? S.neoIn : S.coral)
+                      }}>
+                      {savingCat ? '...' : '✓'}
+                    </motion.button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -19,12 +19,8 @@ export interface User {
 }
 
 // ─── Tipos del Menú Digital (ClientView) ─────────────────────
-export type DishCategory =
-  | 'entrada'
-  | 'principal'
-  | 'postre'
-  | 'bebida'
-  | 'especial'
+// String abierto para soportar categorías personalizadas creadas por el admin
+export type DishCategory = string
 
 export interface Dish {
   id:          string
