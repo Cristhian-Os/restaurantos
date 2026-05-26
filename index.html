@@ -68,29 +68,14 @@
     </style>
   </head>
   <body>
-    <!-- SCRIPT DE EMERGENCIA: desregistra SWs viejos y limpia cachés -->
-    <!-- Se ejecuta síncronamente antes de que React cargue -->
+    <!-- Limpieza de caché al cargar — garantiza versión fresca del SW -->
     <script>
       (function() {
-        // Limpiar cachés de Service Worker de versiones anteriores
+        // Limpiar cachés viejos
         if ('caches' in window) {
           caches.keys().then(function(keys) {
             keys.forEach(function(key) {
-              if (key !== 'ros-v4') {
-                caches.delete(key);
-              }
-            });
-          });
-        }
-        // Desregistrar SWs viejos (que no sean /sw.js)
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistrations().then(function(regs) {
-            regs.forEach(function(reg) {
-              // Si el SW activo no es /sw.js, desregistrarlo
-              var swURL = reg.active ? reg.active.scriptURL : (reg.installing ? reg.installing.scriptURL : '');
-              if (swURL && !swURL.endsWith('/sw.js')) {
-                reg.unregister();
-              }
+              if (key !== 'ros-v5') caches.delete(key);
             });
           });
         }
