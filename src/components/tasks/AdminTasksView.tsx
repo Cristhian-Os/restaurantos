@@ -62,18 +62,28 @@ export const AdminTasksView = memo<AdminTasksViewProps>(({ profile }) => {
   const [filterStatus, setFilter]     = useState<TaskStatus | 'all'>('all')
   const [evidenceTask, setEvidenceTask] = useState<Task | null>(null)
   const [employees,    setEmployees]  = useState<Profile[]>([])
+  const [loadingEmployees, setLoadingEmployees] = useState(false)
   const loadedEmployees = useRef(false)
 
-  // Cargar empleados (una sola vez)
-  const loadEmployees = useCallback(async () => {
-    if (loadedEmployees.current) return
+  // Cargar empleados con manejo de error y reintentos
+  const loadEmployees = useCallback(async (force = false) => {
+    if (loadedEmployees.current && !force) return
     loadedEmployees.current = true
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, full_name, role')
-      .in('role', ['waiter', 'kitchen', 'cashier'])
-      .order('full_name')
-    setEmployees((data ?? []) as Profile[])
+    setLoadingEmployees(true)
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, role')
+        .in('role', ['waiter', 'kitchen', 'cashier'])
+        .order('full_name')
+      if (error) throw error
+      setEmployees((data ?? []) as Profile[])
+    } catch (e) {
+      console.error('Error loading employees:', e)
+      loadedEmployees.current = false // permitir reintento
+    } finally {
+      setLoadingEmployees(false)
+    }
   }, [])
 
   const handleOpenForm = useCallback(() => {
@@ -202,7 +212,8 @@ export const AdminTasksView = memo<AdminTasksViewProps>(({ profile }) => {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.35, ease: EASE }}
-            className="overflow-hidden mb-6"
+            className="mb-6"
+            style={{ overflow: 'visible' }}
           >
             <div className="bg-[#D8DAE4] rounded-3xl p-6" style={S.neoOut}>
               <h2 className="font-bold text-[#2D3561] mb-5" style={{ fontFamily: 'DM Sans, sans-serif' }}>
@@ -236,20 +247,38 @@ export const AdminTasksView = memo<AdminTasksViewProps>(({ profile }) => {
                 </div>
                 {/* Empleado */}
                 <div>
-                  <label className="block text-xs font-bold text-[#9CA3AF] uppercase tracking-wider mb-2">Asignar a *</label>
+                  <label className="block text-xs font-bold text-[#9CA3AF] uppercase tracking-wider mb-2">
+                    Asignar a *
+                    {loadingEmployees && <span className="ml-2 text-[#FF5722] normal-case font-normal">cargando...</span>}
+                  </label>
                   <select
                     value={form.assigned_to}
                     onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))}
                     className="w-full bg-[#CDD0DC] rounded-xl px-4 py-3 text-sm text-[#2D3561] border-none outline-none"
                     style={S.neoIn}
+                    disabled={loadingEmployees}
                   >
-                    <option value="">Seleccionar empleado</option>
+                    <option value="">
+                      {loadingEmployees ? 'Cargando empleados...' : 'Seleccionar empleado'}
+                    </option>
                     {employees.map(emp => (
                       <option key={emp.id} value={emp.id}>
                         {emp.full_name ?? emp.id.slice(-6)} ({emp.role})
                       </option>
                     ))}
                   </select>
+                  {!loadingEmployees && employees.length === 0 && (
+                    <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                      ⚠️ No se encontraron empleados.{' '}
+                      <button
+                        type="button"
+                        onClick={() => loadEmployees(true)}
+                        className="underline text-[#FF5722]"
+                      >
+                        Reintentar
+                      </button>
+                    </p>
+                  )}
                 </div>
                 {/* Prioridad */}
                 <div>

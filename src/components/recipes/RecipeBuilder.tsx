@@ -25,12 +25,25 @@ interface RecipeBuilderProps {
   onClose?: () => void
 }
 
-export function RecipeBuilder({ productId = '', productName = 'Producto', onClose }: RecipeBuilderProps) {
+export function RecipeBuilder({ productId: propProductId = '', productName: propProductName = 'Producto', onClose }: RecipeBuilderProps) {
   const queryClient = useQueryClient()
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [selectedIngrediente, setSelectedIngrediente] = useState<string | null>(null)
   const [cantidad, setCantidad] = useState<number | null>(1)
   const [totalRecipeCost, setTotalRecipeCost] = useState(0)
+  const [selectedProductId, setSelectedProductId] = useState<string>(propProductId)
+  const [selectedProductName, setSelectedProductName] = useState<string>(propProductName)
+
+  const productId = selectedProductId
+  const productName = selectedProductName
+
+  // ─── Query: Productos disponibles (para seleccionar a cuál editar receta) ─
+  const productosQuery = useQuery({
+    queryKey: ['productos_disponibles'],
+    queryFn: () => inventoryService.getProductosDisponibles(),
+    staleTime: 1000 * 60 * 5,
+    enabled: isModalVisible && !propProductId,
+  })
 
   // ─── Query: Ingredientes disponibles ──────────────────────
   const ingredientesQuery = useQuery({
@@ -44,6 +57,7 @@ export function RecipeBuilder({ productId = '', productName = 'Producto', onClos
     queryKey: ['receta', productId],
     queryFn: () => inventoryService.getRecetasByProducto(productId),
     staleTime: 1000 * 60 * 5,
+    enabled: !!productId,
   })
 
   // ─── Mutation: Agregar ingrediente ────────────────────────
@@ -199,6 +213,34 @@ export function RecipeBuilder({ productId = '', productName = 'Producto', onClos
       >
         <Spin spinning={recetaQuery.isLoading}>
           <div className="space-y-6">
+            {/* Sección: Seleccionar Producto (cuando no se pasa productId por props) */}
+            {!propProductId && (
+              <div className="p-4 bg-neo-surface rounded-3xl border-2 border-neo-light" style={S.neoOutSm}>
+                <h4 className="text-base font-bold text-neo-dark mb-3">🍽️ Seleccionar Producto</h4>
+                <Select
+                  placeholder="Elige el producto para editar su receta..."
+                  value={selectedProductId || undefined}
+                  onChange={(val: string) => {
+                    const prod = productosQuery.data?.find(p => p.id === val)
+                    setSelectedProductId(val)
+                    setSelectedProductName(prod?.name ?? 'Producto')
+                    setSelectedIngrediente(null)
+                    setCantidad(1)
+                  }}
+                  loading={productosQuery.isLoading}
+                  options={(productosQuery.data || []).map(p => ({
+                    value: p.id,
+                    label: `${p.name}`,
+                  }))}
+                  style={{ width: '100%' }}
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                />
+              </div>
+            )}
+
             {/* Sección: Agregar Ingrediente */}
             <div
               className="p-5 bg-neo-surface rounded-3xl border-2 border-neo-light"
@@ -236,7 +278,9 @@ export function RecipeBuilder({ productId = '', productName = 'Producto', onClos
                   type="primary"
                   onClick={() => addIngredienteMutation.mutate()}
                   loading={addIngredienteMutation.isPending}
+                  disabled={!productId}
                   className="bg-neo-coral hover:bg-neo-coralDark"
+                  title={!productId ? 'Selecciona un producto primero' : ''}
                 >
                   ✅ Agregar
                 </Button>
@@ -258,12 +302,14 @@ export function RecipeBuilder({ productId = '', productName = 'Producto', onClos
               >
                 <Table
                   columns={columns}
-                  dataSource={recetaQuery.data || []}
+                  dataSource={productId ? (recetaQuery.data || []) : []}
                   rowKey="id"
                   pagination={{ pageSize: 8, simple: true }}
                   loading={recetaQuery.isLoading}
                   locale={{
-                    emptyText: '📭 Sin ingredientes. Agrega algunos arriba.',
+                    emptyText: !productId
+                      ? '⬆️ Selecciona un producto para ver su receta.'
+                      : '📭 Sin ingredientes. Agrega algunos arriba.',
                   }}
                 />
               </div>
