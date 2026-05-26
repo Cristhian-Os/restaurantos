@@ -335,22 +335,30 @@ export default function PublicMenu() {
   }, [])
 
   // ── send order ─────────────────────────────────────────────────
+  // Permite confirmar con mesa O con nombre (cualquiera de los dos)
+  const canConfirm = mesa.trim() !== '' || clientName.trim() !== ''
+
   const sendOrder = useCallback(async () => {
-    if (!mesa.trim() || cart.length === 0) return
+    if (!canConfirm || cart.length === 0) return
     setSending(true)
     try {
       const items = cart.map(i => ({
         id: i.dish.id, name: i.dish.name, price: i.dish.price, quantity: i.qty,
         notes: [i.size && `Tamaño: ${i.size}`, ...(i.extras.length ? [`Adicionales: ${i.extras.join(', ')}`] : []), i.notes].filter(Boolean).join(' | ') || null,
       }))
+      const tableNum = mesa.trim() ? parseInt(mesa) : null
+      const noteParts = [
+        clientName.trim() ? `Cliente: ${clientName.trim()}` : null,
+        !mesa.trim() ? 'Pedido en mostrador / sin mesa' : null,
+      ].filter(Boolean)
       const { data: newOrder } = await supabase.from('orders').insert({
-        table_num:     parseInt(mesa),
+        table_num:     tableNum,
         items:         JSON.stringify(items),
         total:         cartTotal,
-        tipo_pedido:   'LOCAL',
+        tipo_pedido:   mesa.trim() ? 'LOCAL' : 'MOSTRADOR',
         status:        'pending',
         customer_name: clientName.trim() || null,
-        notes:         clientName.trim() ? `Cliente: ${clientName.trim()}` : null,
+        notes:         noteParts.length ? noteParts.join(' · ') : null,
         user_id:       (await supabase.auth.getUser()).data.user?.id ?? '00000000-0000-0000-0000-000000000000',
       }).select('id').single()
 
@@ -361,7 +369,7 @@ export default function PublicMenu() {
       }
       setSent(true); setCart([]); setShowCart(false)
     } finally { setSending(false) }
-  }, [cart, mesa, clientName, cartTotal])
+  }, [cart, mesa, clientName, cartTotal, canConfirm])
 
   // ── scrollspy setup (only when not searching) ─────────────────
   useEffect(() => {
@@ -662,22 +670,39 @@ export default function PublicMenu() {
               </div>
 
               {/* Mesa + nombre */}
-              <div style={{ display: 'grid', gridTemplateColumns: mesa ? '1fr' : '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: mesa ? '1fr' : '1fr 1fr', gap: '0.75rem', marginBottom: '0.625rem' }}>
                 {!mesa && (
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: txtMut, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem' }}>Mesa *</label>
+                    <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: txtMut, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem' }}>
+                      Mesa <span style={{ fontWeight: 400, textTransform: 'none', fontSize: '0.625rem' }}>(opcional)</span>
+                    </label>
                     <input type="number" value={mesa} onChange={e => setMesa(e.target.value)}
                       placeholder="Nº"
                       style={{ width: '100%', backgroundColor: bgSurf, borderRadius: '0.875rem', padding: '0.75rem 1rem', border: 'none', outline: 'none', fontSize: '1rem', color: txt, fontFamily: 'inherit', fontWeight: 600, textAlign: 'center', boxShadow: S.in, boxSizing: 'border-box' }} />
                   </div>
                 )}
                 <div style={{ gridColumn: mesa ? '1 / -1' : undefined }}>
-                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: txtMut, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem' }}>Tu nombre (opcional)</label>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: txtMut, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.375rem' }}>
+                    Tu nombre <span style={{ fontWeight: 400, textTransform: 'none', fontSize: '0.625rem' }}>(opcional)</span>
+                  </label>
                   <input type="text" value={clientName} onChange={e => setClientName(e.target.value)}
                     placeholder="Ej: María"
                     style={{ width: '100%', backgroundColor: bgSurf, borderRadius: '0.875rem', padding: '0.75rem 1rem', border: 'none', outline: 'none', fontSize: '0.9375rem', color: txt, fontFamily: 'inherit', boxShadow: S.in, boxSizing: 'border-box' }} />
                 </div>
               </div>
+
+              {/* Hint cuando ninguno está llenado */}
+              {!canConfirm && (
+                <p style={{ fontSize: '0.6875rem', color: txtMut, marginBottom: '0.875rem', textAlign: 'center' }}>
+                  Ingresa tu <strong style={{ color: txt }}>nombre</strong> o el número de <strong style={{ color: txt }}>mesa</strong> para continuar
+                </p>
+              )}
+              {/* Hint mostrador — sin mesa pero con nombre */}
+              {canConfirm && !mesa.trim() && clientName.trim() && (
+                <p style={{ fontSize: '0.6875rem', color: 'var(--tag-green-text)', marginBottom: '0.875rem', textAlign: 'center', fontWeight: 700 }}>
+                  ✓ Pedido a nombre de {clientName.trim()}
+                </p>
+              )}
 
               {/* Total */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1rem', borderTop: `1px solid ${bgSurf}`, marginBottom: '1rem' }}>
@@ -686,9 +711,13 @@ export default function PublicMenu() {
               </div>
 
               <motion.button whileTap={{ scale: 0.97 }}
-                onClick={sendOrder} disabled={sending || !mesa.trim()}
-                style={{ width: '100%', padding: '1rem', borderRadius: '1rem', border: 'none', backgroundColor: !mesa.trim() ? bgSurf : acc, color: !mesa.trim() ? txtMut : '#fff', fontWeight: 700, fontSize: '1rem', cursor: !mesa.trim() ? 'not-allowed' : 'pointer', fontFamily: 'inherit', boxShadow: !mesa.trim() ? S.inSm : S.coral }}>
-                {sending ? 'Enviando...' : !mesa.trim() ? 'Ingresa tu número de mesa' : `✅ Pedir · ${fmtCOP(cartTotal)}`}
+                onClick={sendOrder} disabled={sending || !canConfirm}
+                style={{ width: '100%', padding: '1rem', borderRadius: '1rem', border: 'none', backgroundColor: !canConfirm ? bgSurf : acc, color: !canConfirm ? txtMut : '#fff', fontWeight: 700, fontSize: '1rem', cursor: !canConfirm ? 'not-allowed' : 'pointer', fontFamily: 'inherit', boxShadow: !canConfirm ? S.inSm : S.coral }}>
+                {sending
+                  ? 'Enviando...'
+                  : !canConfirm
+                    ? 'Ingresa tu nombre o número de mesa'
+                    : `✅ Pedir · ${fmtCOP(cartTotal)}`}
               </motion.button>
             </motion.div>
           </motion.div>
