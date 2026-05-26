@@ -39,13 +39,14 @@ interface DishForm {
   category:    DishCategory
   tags:        string   // string separado por comas → se convierte a array al guardar
   available:   boolean
+  has_sizes:   boolean  // true = muestra selector de tamaño al cliente
   image_file?: File | null
   image_preview?: string | null
 }
 
 const FORM_EMPTY: DishForm = {
   name:'', description:'', price:'', category:'principal',
-  tags:'', available:true, image_file:null, image_preview:null,
+  tags:'', available:true, has_sizes:false, image_file:null, image_preview:null,
 }
 
 function dishToForm(d: Dish): DishForm {
@@ -56,6 +57,7 @@ function dishToForm(d: Dish): DishForm {
     category:      d.category,
     tags:          (d.tags ?? []).join(', '),
     available:     d.available,
+    has_sizes:     d.has_sizes ?? false,
     image_file:    null,
     image_preview: d.image_url ?? null,
   }
@@ -160,6 +162,7 @@ export const MenuManager = memo(() => {
         category:    form.category,
         tags:        tagsArray,
         available:   form.available,
+        has_sizes:   form.has_sizes,
         availability_status: form.available ? 'available' : 'out_of_stock',
       }
 
@@ -603,7 +606,8 @@ export const MenuManager = memo(() => {
                     ))}
                   </div>
                 </div>
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-2 flex flex-col gap-3">
+                  {/* Toggle disponibilidad */}
                   <label className="flex items-center gap-3 cursor-pointer">
                     <div className={`relative w-11 h-6 rounded-full transition-colors ${form.available ? 'bg-[#FF5722]' : 'bg-[#CDD0DC]'}`}
                       onClick={() => setForm(p => ({ ...p, available: !p.available }))}>
@@ -612,6 +616,24 @@ export const MenuManager = memo(() => {
                     <span className="text-sm font-medium text-[#2D3561]">
                       {form.available ? '✅ Disponible en el menú' : '⏸️ No disponible'}
                     </span>
+                  </label>
+
+                  {/* Toggle tamaños */}
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <div className={`relative w-11 h-6 rounded-full transition-colors ${form.has_sizes ? 'bg-[#FF5722]' : 'bg-[#CDD0DC]'}`}
+                      onClick={() => setForm(p => ({ ...p, has_sizes: !p.has_sizes }))}>
+                      <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${form.has_sizes ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-[#2D3561]">
+                        {form.has_sizes ? '📏 Tiene tamaños (Pequeño / Mediano / Grande)' : '1️⃣ Tamaño único'}
+                      </span>
+                      <p className="text-[11px] mt-0.5" style={{ color: '#8B92AA' }}>
+                        {form.has_sizes
+                          ? 'El cliente podrá elegir tamaño al pedir'
+                          : 'No se mostrará selector de tamaño al cliente'}
+                      </p>
+                    </div>
                   </label>
                 </div>
               </div>
@@ -664,6 +686,7 @@ export const MenuManager = memo(() => {
                   <div className="flex items-center gap-2">
                     <p className="font-bold text-[#2D3561] text-sm truncate">{dish.name}</p>
                     {!dish.available && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold shrink-0">OFF</span>}
+                    {dish.has_sizes && <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-bold shrink-0">📏 Tamaños</span>}
                   </div>
                   {(dish.tags ?? []).length > 0 && (
                     <div className="flex gap-1 mt-0.5 flex-wrap">

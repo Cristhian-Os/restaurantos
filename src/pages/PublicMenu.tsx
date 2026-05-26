@@ -86,23 +86,25 @@ const CustomizeModal = memo(({ dish, onAdd, onClose }: {
           </div>
         </div>
 
-        {/* Tamaño */}
-        <div style={{ marginBottom:'1rem' }}>
-          <p style={{ fontSize:'0.75rem', fontWeight:700, color:'#8B92AA', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'0.5rem' }}>
-            Tamaño (opcional)
-          </p>
-          <div style={{ display:'flex', gap:'0.5rem' }}>
-            {SIZES.map(s => (
-              <button key={s} onClick={() => setSize(size === s ? '' : s)}
-                style={{
-                  flex:1, padding:'0.5rem', borderRadius:'0.75rem', border:'none',
-                  fontWeight:700, fontSize:'0.8125rem', cursor:'pointer', fontFamily:'inherit',
-                  ...(size === s ? { background:'#FF5722', color:'#fff', ...S.coral }
-                    : { backgroundColor:'#D8DAE4', color:'#5A617A', ...S.outSm })
-                }}>{s}</button>
-            ))}
+        {/* Tamaño — solo si el plato tiene tamaños */}
+        {dish.has_sizes && (
+          <div style={{ marginBottom:'1rem' }}>
+            <p style={{ fontSize:'0.75rem', fontWeight:700, color:'#8B92AA', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'0.5rem' }}>
+              Tamaño
+            </p>
+            <div style={{ display:'flex', gap:'0.5rem' }}>
+              {SIZES.map(s => (
+                <button key={s} onClick={() => setSize(size === s ? '' : s)}
+                  style={{
+                    flex:1, padding:'0.5rem', borderRadius:'0.75rem', border:'none',
+                    fontWeight:700, fontSize:'0.8125rem', cursor:'pointer', fontFamily:'inherit',
+                    ...(size === s ? { background:'#FF5722', color:'#fff', ...S.coral }
+                      : { backgroundColor:'#D8DAE4', color:'#5A617A', ...S.outSm })
+                  }}>{s}</button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Toppings / adicionales */}
         {hasOptions && (

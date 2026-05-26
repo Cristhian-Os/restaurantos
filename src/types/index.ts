@@ -32,6 +32,7 @@ export interface Dish {
   available:   boolean
   availability_status?: 'available' | 'out_of_stock' | 'discontinued'
   tags?:       string[]     // ej: ['vegano', 'sin gluten', 'picante']
+  has_sizes?:  boolean      // true = el cliente puede elegir tamaño (Pequeño/Mediano/Grande)
 }
 
 // ─── Tipos del Sistema de Tareas ─────────────────────────────
