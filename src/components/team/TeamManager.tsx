@@ -1,20 +1,24 @@
 /**
- * TeamManager.tsx v2
+ * TeamManager.tsx v3
  * - Foto de perfil por empleado (Supabase Storage)
  * - Campo email de recuperación
- * - Creación funcional via admin API (Edge Function)
- * - Editar perfil propio del admin
+ * - Creación funcional via admin RPC
+ * - Editar perfil propio del admin (nombre, teléfono, email, contraseña)
+ * - Hard delete (anonimizar) empleado
+ * - Horario semanal (ScheduleCalendar)
+ * - Tema claro/oscuro via CSS variables
  */
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../services/supabaseClient'
+import { ScheduleCalendar } from './ScheduleCalendar'
 import message from 'antd/es/message'
 
 const S = {
-  neoOut:  { boxShadow: '8px 8px 16px rgba(130,142,170,0.55),-8px -8px 16px rgba(255,255,255,0.55)' },
-  neoOutSm:{ boxShadow: '4px 4px 10px rgba(130,142,170,0.5),-4px -4px 10px rgba(255,255,255,0.5)' },
-  neoIn:   { boxShadow: 'inset 5px 5px 10px rgba(130,142,170,0.5),inset -5px -5px 10px rgba(255,255,255,0.5)' },
-  coral:   { boxShadow: '8px 8px 16px rgba(255,87,34,0.32),-4px -4px 12px rgba(255,255,255,0.45)' },
+  out:   { boxShadow: 'var(--shadow-out,   8px 8px 16px rgba(130,142,170,0.55),-8px -8px 16px rgba(255,255,255,0.55))' },
+  outSm: { boxShadow: 'var(--shadow-out-sm,4px 4px 10px rgba(130,142,170,0.5), -4px -4px 10px rgba(255,255,255,0.5))' },
+  in:    { boxShadow: 'var(--shadow-in,    inset 5px 5px 10px rgba(130,142,170,0.5),inset -5px -5px 10px rgba(255,255,255,0.5))' },
+  coral: { boxShadow: 'var(--shadow-coral, 8px 8px 16px rgba(255,87,34,0.32),-4px -4px 12px rgba(255,255,255,0.45))' },
 } as const
 
 type Role = 'admin' | 'waiter' | 'kitchen' | 'cashier' | 'client'
@@ -40,7 +44,7 @@ const ROLE_CONFIG: Record<Role, { label: string; emoji: string; color: string }>
 
 interface NewEmployeeForm {
   email:          string
-  recovery_email: string   // Correo personal para recuperación
+  recovery_email: string
   full_name:      string
   role:           Role
   password:       string
@@ -51,7 +55,8 @@ const FORM_INITIAL: NewEmployeeForm = {
   email: '', recovery_email: '', full_name: '', role: 'waiter', password: '', phone: '',
 }
 
-// ── Subir foto a Supabase Storage ─────────────────────────────
+const DELETED_NAME = '[Cuenta eliminada]'
+
 async function uploadAvatar(profileId: string, file: File): Promise<string | null> {
   const ext  = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
   const path = `avatars/${profileId}.${ext}`
@@ -60,12 +65,20 @@ async function uploadAvatar(profileId: string, file: File): Promise<string | nul
     .upload(path, file, { upsert: true, contentType: file.type })
   if (error) { console.error('Avatar upload error:', error); return null }
   const { data: { publicUrl } } = supabase.storage
-    .from('restaurant-assets')
-    .getPublicUrl(path)
+    .from('restaurant-assets').getPublicUrl(path)
   return publicUrl + `?v=${Date.now()}`
 }
 
 export const TeamManager = memo(() => {
+  // ── theme vars ────────────────────────────────────────────────
+  const bg     = 'var(--bg, #D8DAE4)'
+  const bgSurf = 'var(--bg-surface, #CDD0DC)'
+  const txt    = 'var(--text-primary, #2D3561)'
+  const txtSec = 'var(--text-secondary, #5A617A)'
+  const txtMut = 'var(--text-muted, #8B92AA)'
+  const acc    = 'var(--accent, #FF5722)'
+
+  // ── state ─────────────────────────────────────────────────────
   const [profiles,    setProfiles]  = useState<Profile[]>([])
   const [loading,     setLoading]   = useState(true)
   const [showForm,    setShowForm]  = useState(false)
@@ -77,17 +90,27 @@ export const TeamManager = memo(() => {
   const [search,      setSearch]    = useState('')
   const [avatarFile,  setAvatarFile]= useState<File | null>(null)
   const [avatarPreview, setPreview] = useState<string | null>(null)
-  // Modal editar perfil propio
-  const [showEditMe,  setShowEditMe]= useState(false)
-  const [myProfile,   setMyProfile] = useState<Profile | null>(null)
-  const [myForm,      setMyForm]    = useState({ full_name: '', phone: '' })
-  const [savingMe,    setSavingMe]  = useState(false)
-  const avatarRef = useRef<HTMLInputElement>(null)
-  const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const meAvatarRef = useRef<HTMLInputElement>(null)
-  const [meAvatarFile, setMeAvatarFile] = useState<File | null>(null)
-  const [meAvatarPreview, setMePreview] = useState<string | null>(null)
 
+  // Mi perfil modal
+  const [showEditMe,    setShowEditMe]  = useState(false)
+  const [myProfile,     setMyProfile]  = useState<Profile | null>(null)
+  const [myForm,        setMyForm]     = useState({ full_name: '', phone: '', new_email: '', new_password: '' })
+  const [savingMe,      setSavingMe]   = useState(false)
+  const [meAvatarFile,  setMeAvatarFile] = useState<File | null>(null)
+  const [meAvatarPreview, setMePreview]  = useState<string | null>(null)
+  const avatarRef   = useRef<HTMLInputElement>(null)
+  const meAvatarRef = useRef<HTMLInputElement>(null)
+
+  // Hard delete confirm
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [hardDeleting,    setHardDeleting]    = useState(false)
+
+  // Schedule modal
+  const [scheduleEmp, setScheduleEmp] = useState<{ id: string; name: string } | null>(null)
+
+  const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── data fetch ────────────────────────────────────────────────
   const fetchProfiles = useCallback(async () => {
     const { data, error } = await supabase
       .from('profiles')
@@ -99,30 +122,26 @@ export const TeamManager = memo(() => {
 
   useEffect(() => {
     fetchProfiles()
-    // Cargar perfil propio
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
-      supabase.from('profiles').select('*').eq('id', user.id).single()
-        .then(({ data }) => {
-          if (data) {
-            setMyProfile(data)
-            setMyForm({ full_name: data.full_name ?? '', phone: data.phone ?? '' })
-            if (data.avatar_url) setMePreview(data.avatar_url)
-          }
-        })
+      supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }) => {
+        if (data) {
+          setMyProfile(data)
+          setMyForm({ full_name: data.full_name ?? '', phone: data.phone ?? '', new_email: '', new_password: '' })
+          if (data.avatar_url) setMePreview(data.avatar_url)
+        }
+      })
     })
   }, [fetchProfiles])
 
-  // ── Crear empleado ────────────────────────────────────────
+  // ── create employee ───────────────────────────────────────────
   const handleCreate = useCallback(async () => {
     setFormError(null)
     if (!form.email.trim())       { setFormError('Email requerido'); return }
     if (!form.full_name.trim())   { setFormError('Nombre requerido'); return }
     if (form.password.length < 6) { setFormError('Contraseña mínimo 6 caracteres'); return }
-
     setCreating(true)
     try {
-      // Intento 1: RPC que crea el usuario en auth + profile en una transacción
       const { data: rpcData, error: rpcError } = await supabase.rpc('create_employee_profile', {
         p_email:          form.email.trim().toLowerCase(),
         p_full_name:      form.full_name.trim(),
@@ -131,63 +150,62 @@ export const TeamManager = memo(() => {
         p_recovery_email: form.recovery_email.trim() || null,
         p_phone:          form.phone.trim() || null,
       })
+      if (rpcError) throw new Error(rpcError.message)
 
-      let profileId: string | null = null
+      const profileId: string | null = rpcData?.profile_id ?? null
+      message.success(`✅ ${form.full_name.trim()} agregado como ${ROLE_CONFIG[form.role].label}`)
 
-      if (rpcError) {
-        throw new Error(rpcError.message)
-      } else {
-        profileId = rpcData?.profile_id ?? null
-        message.success(`✅ ${form.full_name.trim()} agregado como ${ROLE_CONFIG[form.role].label}`)
-      }
-
-      // Subir avatar si hay foto
       if (avatarFile && profileId) {
         const url = await uploadAvatar(profileId, avatarFile)
-        if (url) {
-          await supabase.from('profiles').update({ avatar_url: url }).eq('id', profileId)
-        }
+        if (url) await supabase.from('profiles').update({ avatar_url: url }).eq('id', profileId)
       }
-
-      setForm(FORM_INITIAL)
-      setAvatarFile(null)
-      setPreview(null)
-      setShowForm(false)
+      setForm(FORM_INITIAL); setAvatarFile(null); setPreview(null); setShowForm(false)
       if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current)
       fetchTimerRef.current = setTimeout(fetchProfiles, 800)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al crear empleado'
       setFormError(msg.includes('duplicate') ? 'Ya existe una cuenta con ese email' : msg)
-    } finally {
-      setCreating(false)
-    }
+    } finally { setCreating(false) }
   }, [form, avatarFile, fetchProfiles])
 
-  // ── Guardar mi perfil ─────────────────────────────────────
+  // ── save own profile ──────────────────────────────────────────
   const handleSaveMe = useCallback(async () => {
     if (!myProfile) return
     setSavingMe(true)
     try {
+      // 1. Actualizar datos del perfil
       let avatarUrl = myProfile.avatar_url
-      if (meAvatarFile) {
-        avatarUrl = await uploadAvatar(myProfile.id, meAvatarFile)
-      }
-      const { error } = await supabase.from('profiles').update({
-        full_name:  myForm.full_name.trim() || null,
-        phone:      myForm.phone.trim() || null,
+      if (meAvatarFile) avatarUrl = await uploadAvatar(myProfile.id, meAvatarFile)
+      const { error: profErr } = await supabase.from('profiles').update({
+        full_name: myForm.full_name.trim() || null,
+        phone:     myForm.phone.trim() || null,
         avatar_url: avatarUrl,
       }).eq('id', myProfile.id)
-      if (error) throw error
-      message.success('Perfil actualizado')
+      if (profErr) throw profErr
+
+      // 2. Cambiar email si el campo está lleno
+      if (myForm.new_email.trim()) {
+        const { error: emailErr } = await supabase.auth.updateUser({ email: myForm.new_email.trim() })
+        if (emailErr) throw emailErr
+        message.info('Email de acceso actualizado. Revisa tu bandeja de entrada para confirmar.')
+      }
+      // 3. Cambiar contraseña si el campo está lleno
+      if (myForm.new_password.trim()) {
+        if (myForm.new_password.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres')
+        const { error: passErr } = await supabase.auth.updateUser({ password: myForm.new_password.trim() })
+        if (passErr) throw passErr
+        message.success('Contraseña actualizada')
+      }
+
+      message.success('Perfil actualizado ✅')
       setShowEditMe(false)
       fetchProfiles()
     } catch (e) {
       message.error('Error al guardar: ' + (e instanceof Error ? e.message : ''))
-    } finally {
-      setSavingMe(false)
-    }
+    } finally { setSavingMe(false) }
   }, [myProfile, myForm, meAvatarFile, fetchProfiles])
 
+  // ── change role ───────────────────────────────────────────────
   const handleChangeRole = useCallback(async (profileId: string, newRole: Role) => {
     const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', profileId)
     if (error) { message.error('Error: ' + error.message); return }
@@ -196,6 +214,7 @@ export const TeamManager = memo(() => {
     fetchProfiles()
   }, [fetchProfiles])
 
+  // ── toggle active ─────────────────────────────────────────────
   const handleToggleActive = useCallback(async (profile: Profile) => {
     if (profile.role === 'admin') { message.warning('No se puede desactivar al admin'); return }
     const { error } = await supabase.from('profiles').update({ active: !profile.active }).eq('id', profile.id)
@@ -204,17 +223,42 @@ export const TeamManager = memo(() => {
     fetchProfiles()
   }, [fetchProfiles])
 
+  // ── hard delete (anonymize) ───────────────────────────────────
+  const handleHardDelete = useCallback(async (profileId: string) => {
+    setHardDeleting(true)
+    try {
+      // 1. Eliminar turnos del empleado
+      await supabase.from('employee_schedules').delete().eq('employee_id', profileId)
+      // 2. Anonimizar el perfil
+      const { error } = await supabase.from('profiles').update({
+        active:     false,
+        full_name:  DELETED_NAME,
+        phone:      null,
+        avatar_url: null,
+      }).eq('id', profileId)
+      if (error) throw error
+      message.success('Empleado eliminado del equipo')
+      setConfirmDeleteId(null)
+      fetchProfiles()
+    } catch (e) {
+      message.error('Error al eliminar: ' + (e instanceof Error ? e.message : ''))
+    } finally { setHardDeleting(false) }
+  }, [fetchProfiles])
+
+  // ── avatar handlers ───────────────────────────────────────────
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>, forMe = false) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 3 * 1024 * 1024) { message.error('La foto debe ser menor a 3MB'); return }
     const url = URL.createObjectURL(file)
     if (forMe) { setMeAvatarFile(file); setMePreview(url) }
-    else       { setAvatarFile(file);   setPreview(url) }
+    else       { setAvatarFile(file);   setPreview(url)   }
     e.target.value = ''
   }
 
+  // ── filter (hide deleted accounts) ───────────────────────────
   const filtered = profiles.filter(p => {
+    if (p.full_name === DELETED_NAME) return false
     if (!search.trim()) return true
     const q = search.toLowerCase()
     return p.full_name?.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q) || p.role.includes(q)
@@ -222,23 +266,24 @@ export const TeamManager = memo(() => {
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '5rem 0' }}>
-      <div style={{ width: 32, height: 32, borderRadius: '50%', border: '4px solid #FF5722', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ width: 32, height: 32, borderRadius: '50%', border: `4px solid ${acc}`, borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
-          <h2 className="text-2xl font-bold text-[#2D3561]" style={{ fontFamily: 'DM Sans, sans-serif' }}>👥 Equipo</h2>
-          <p className="text-sm mt-0.5" style={{ color: '#8B92AA' }}>{profiles.filter(p=>p.active).length} activos · {profiles.length} total</p>
+          <h2 style={{ fontFamily: 'DM Sans, sans-serif', fontWeight: 700, fontSize: '1.5rem', color: txt, margin: 0 }}>👥 Equipo</h2>
+          <p style={{ fontSize: '0.875rem', color: txtMut, marginTop: '0.125rem' }}>
+            {profiles.filter(p => p.active && p.full_name !== DELETED_NAME).length} activos · {profiles.filter(p => p.full_name !== DELETED_NAME).length} total
+          </p>
         </div>
-        <div className="flex gap-2">
-          {/* Mi perfil */}
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button onClick={() => setShowEditMe(true)}
-            className="flex items-center gap-2 text-sm font-bold px-4 py-2.5 rounded-2xl"
-            style={{ backgroundColor: '#D8DAE4', color: '#5A617A', ...S.neoOutSm }}>
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, padding: '0.625rem 1rem', borderRadius: '1rem', border: 'none', cursor: 'pointer', backgroundColor: bg, color: txtSec, fontFamily: 'inherit', ...S.outSm }}>
             {myProfile?.avatar_url
               ? <img src={myProfile.avatar_url} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
               : '👤'
@@ -247,96 +292,80 @@ export const TeamManager = memo(() => {
           </button>
           <motion.button whileTap={{ scale: 0.96 }}
             onClick={() => { setShowForm(true); setFormError(null) }}
-            className="flex items-center gap-2 text-sm font-bold text-white bg-[#FF5722] px-4 py-2.5 rounded-2xl"
-            style={S.coral}>
+            style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', fontWeight: 700, padding: '0.625rem 1rem', borderRadius: '1rem', border: 'none', cursor: 'pointer', backgroundColor: acc, color: '#fff', fontFamily: 'inherit', ...S.coral }}>
             + Agregar
           </motion.button>
         </div>
       </div>
 
-      {/* Buscador */}
-      <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ backgroundColor: '#D8DAE4', ...S.neoIn }}>
-        <span style={{ color: '#8B92AA' }}>🔍</span>
+      {/* ── Search ── */}
+      <div style={{ borderRadius: '1rem', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: bg, ...S.in }}>
+        <span style={{ color: txtMut }}>🔍</span>
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Buscar por nombre, email o rol..."
-          className="flex-1 bg-transparent text-sm outline-none placeholder-[#8B92AA]"
-          style={{ color: '#2D3561' }} />
+          style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: '0.875rem', color: txt, fontFamily: 'inherit' }} />
       </div>
 
-      {/* Formulario nuevo empleado */}
+      {/* ── New employee form ── */}
       <AnimatePresence>
         {showForm && (
-          <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }}
-            exit={{ opacity:0, height:0 }} transition={{ duration: 0.35 }} className="overflow-hidden">
-            <div className="rounded-3xl p-6" style={{ backgroundColor: '#D8DAE4', ...S.neoOut }}>
-              <h3 className="font-bold text-[#2D3561] mb-5">➕ Nuevo empleado</h3>
+          <motion.div
+            initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.25 }}>
+            <div style={{ borderRadius: '1.5rem', padding: '1.5rem', backgroundColor: bg, ...S.out }}>
+              <h3 style={{ fontWeight: 700, color: txt, marginBottom: '1.25rem', margin: '0 0 1.25rem', fontFamily: 'DM Sans, sans-serif' }}>➕ Nuevo empleado</h3>
 
               {/* Avatar upload */}
-              <div className="flex items-center gap-4 mb-5">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem' }}>
                 <div onClick={() => avatarRef.current?.click()}
-                  className="w-16 h-16 rounded-2xl flex items-center justify-center cursor-pointer overflow-hidden shrink-0"
-                  style={{ backgroundColor: '#CDD0DC', ...S.neoIn }}>
-                  {avatarPreview
-                    ? <img src={avatarPreview} alt="avatar" className="w-full h-full object-cover" />
-                    : <span className="text-2xl">📷</span>
-                  }
+                  style={{ width: 64, height: 64, borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', flexShrink: 0, backgroundColor: bgSurf, ...S.in }}>
+                  {avatarPreview ? <img src={avatarPreview} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: '1.5rem' }}>📷</span>}
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-[#2D3561]">Foto de perfil</p>
-                  <p className="text-xs mt-0.5" style={{ color: '#8B92AA' }}>JPG/PNG · máx 3MB</p>
-                  <button onClick={() => avatarRef.current?.click()}
-                    className="text-xs font-bold mt-1" style={{ color: '#FF5722', background: 'none', border: 'none', cursor: 'pointer' }}>
-                    Seleccionar foto
-                  </button>
+                  <p style={{ fontSize: '0.75rem', fontWeight: 700, color: txt }}>Foto de perfil</p>
+                  <p style={{ fontSize: '0.75rem', color: txtMut }}>JPG/PNG · máx 3MB</p>
+                  <button onClick={() => avatarRef.current?.click()} style={{ fontSize: '0.75rem', fontWeight: 700, color: acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Seleccionar foto</button>
                 </div>
-                <input ref={avatarRef} type="file" accept="image/*" className="sr-only"
-                  onChange={e => handleAvatarChange(e)} />
+                <input ref={avatarRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleAvatarChange(e)} />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#8B92AA' }}>Nombre completo *</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.875rem' }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, marginBottom: '0.375rem' }}>Nombre completo *</label>
                   <input value={form.full_name} onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))}
                     placeholder="Ej: María García"
-                    className="w-full rounded-xl px-4 py-3 text-sm outline-none"
-                    style={{ backgroundColor: '#CDD0DC', color: '#2D3561', ...S.neoIn }} />
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: 'none', outline: 'none', fontSize: '0.875rem', color: txt, backgroundColor: bgSurf, fontFamily: 'inherit', ...S.in, boxSizing: 'border-box' }} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#8B92AA' }}>Email de acceso *</label>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, marginBottom: '0.375rem' }}>Email de acceso *</label>
                   <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
                     placeholder="acceso@restaurante.com"
-                    className="w-full rounded-xl px-4 py-3 text-sm outline-none"
-                    style={{ backgroundColor: '#CDD0DC', color: '#2D3561', ...S.neoIn }} />
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: 'none', outline: 'none', fontSize: '0.875rem', color: txt, backgroundColor: bgSurf, fontFamily: 'inherit', ...S.in, boxSizing: 'border-box' }} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#8B92AA' }}>Contraseña inicial *</label>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, marginBottom: '0.375rem' }}>Contraseña *</label>
                   <input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
                     placeholder="Mínimo 6 caracteres"
-                    className="w-full rounded-xl px-4 py-3 text-sm outline-none"
-                    style={{ backgroundColor: '#CDD0DC', color: '#2D3561', ...S.neoIn }} />
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: 'none', outline: 'none', fontSize: '0.875rem', color: txt, backgroundColor: bgSurf, fontFamily: 'inherit', ...S.in, boxSizing: 'border-box' }} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#8B92AA' }}>Email personal (recuperación)</label>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, marginBottom: '0.375rem' }}>Email recuperación</label>
                   <input type="email" value={form.recovery_email} onChange={e => setForm(p => ({ ...p, recovery_email: e.target.value }))}
                     placeholder="personal@gmail.com"
-                    className="w-full rounded-xl px-4 py-3 text-sm outline-none"
-                    style={{ backgroundColor: '#CDD0DC', color: '#2D3561', ...S.neoIn }} />
-                  <p className="text-[10px] mt-1" style={{ color: '#8B92AA' }}>Para recuperar contraseña de forma autónoma</p>
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: 'none', outline: 'none', fontSize: '0.875rem', color: txt, backgroundColor: bgSurf, fontFamily: 'inherit', ...S.in, boxSizing: 'border-box' }} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#8B92AA' }}>Teléfono</label>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, marginBottom: '0.375rem' }}>Teléfono</label>
                   <input type="tel" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
                     placeholder="+57 300 000 0000"
-                    className="w-full rounded-xl px-4 py-3 text-sm outline-none"
-                    style={{ backgroundColor: '#CDD0DC', color: '#2D3561', ...S.neoIn }} />
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: 'none', outline: 'none', fontSize: '0.875rem', color: txt, backgroundColor: bgSurf, fontFamily: 'inherit', ...S.in, boxSizing: 'border-box' }} />
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#8B92AA' }}>Rol *</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['waiter','kitchen','cashier','admin'] as Role[]).map(r => (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, marginBottom: '0.5rem' }}>Rol *</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                    {(['waiter', 'kitchen', 'cashier', 'admin'] as Role[]).map(r => (
                       <button key={r} onClick={() => setForm(p => ({ ...p, role: r }))}
-                        className="py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                        style={form.role === r ? { background: '#FF5722', color: 'white', ...S.coral } : { backgroundColor: '#D8DAE4', color: '#5A617A', ...S.neoOutSm }}>
+                        style={{ padding: '0.625rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.8125rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem', ...(form.role === r ? { backgroundColor: acc, color: '#fff', ...S.coral } : { backgroundColor: bg, color: txtSec, ...S.outSm }) }}>
                         {ROLE_CONFIG[r].emoji} {ROLE_CONFIG[r].label}
                       </button>
                     ))}
@@ -344,16 +373,15 @@ export const TeamManager = memo(() => {
                 </div>
               </div>
 
-              {formError && <p className="text-xs text-red-500 font-medium mt-3">⚠️ {formError}</p>}
+              {formError && <p style={{ fontSize: '0.75rem', color: '#EF4444', fontWeight: 600, marginTop: '0.75rem' }}>⚠️ {formError}</p>}
 
-              <div className="flex gap-3 mt-5">
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem' }}>
                 <button onClick={() => { setShowForm(false); setForm(FORM_INITIAL); setFormError(null); setAvatarFile(null); setPreview(null) }}
-                  className="flex-1 py-3 rounded-2xl text-sm font-bold" style={{ backgroundColor: '#D8DAE4', color: '#5A617A', ...S.neoOut }}>
+                  style={{ flex: 1, padding: '0.75rem', borderRadius: '1rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.875rem', backgroundColor: bg, color: txtSec, ...S.out }}>
                   Cancelar
                 </button>
                 <motion.button whileTap={{ scale: 0.97 }} onClick={handleCreate} disabled={creating}
-                  className={`flex-1 py-3 rounded-2xl text-sm font-bold text-white bg-[#FF5722] ${creating ? 'opacity-70' : ''}`}
-                  style={S.coral}>
+                  style={{ flex: 1, padding: '0.75rem', borderRadius: '1rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.875rem', backgroundColor: acc, color: '#fff', opacity: creating ? 0.7 : 1, ...S.coral }}>
                   {creating ? 'Creando...' : '✅ Crear empleado'}
                 </motion.button>
               </div>
@@ -362,72 +390,84 @@ export const TeamManager = memo(() => {
         )}
       </AnimatePresence>
 
-      {/* Lista de empleados */}
-      <div className="flex flex-col gap-3">
+      {/* ── Employee list ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
         {filtered.length === 0 && (
-          <div className="rounded-3xl p-12 text-center" style={{ backgroundColor: '#D8DAE4', ...S.neoIn }}>
-            <p className="text-4xl mb-2">👥</p>
-            <p className="font-bold text-[#2D3561]">Sin empleados</p>
+          <div style={{ borderRadius: '1.5rem', padding: '3rem 1rem', textAlign: 'center', backgroundColor: bg, ...S.in }}>
+            <p style={{ fontSize: '2.5rem', margin: '0 0 0.5rem' }}>👥</p>
+            <p style={{ fontWeight: 700, color: txt }}>Sin empleados</p>
           </div>
         )}
         {filtered.map(profile => {
-          const roleCfg = ROLE_CONFIG[profile.role]
+          const roleCfg   = ROLE_CONFIG[profile.role]
           const isEditing = editingId === profile.id
           return (
             <motion.div key={profile.id} layout
-              className={`rounded-2xl p-4 ${!profile.active ? 'opacity-50' : ''}`}
-              style={{ backgroundColor: '#D8DAE4', ...S.neoOut }}>
-              <div className="flex items-center gap-3">
+              style={{ borderRadius: '1rem', padding: '0.875rem 1rem', backgroundColor: bg, opacity: profile.active ? 1 : 0.55, ...S.out }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 {/* Avatar */}
-                <div className="w-11 h-11 rounded-2xl overflow-hidden shrink-0 flex items-center justify-center text-lg"
-                  style={{ backgroundColor: '#CDD0DC', ...S.neoIn }}>
+                <div style={{ width: 44, height: 44, borderRadius: '1rem', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', backgroundColor: bgSurf, ...S.in }}>
                   {profile.avatar_url
-                    ? <img src={profile.avatar_url} alt={profile.full_name ?? ''} className="w-full h-full object-cover" />
+                    ? <img src={profile.avatar_url} alt={profile.full_name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : roleCfg.emoji
                   }
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-[#2D3561] text-sm truncate">
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 700, color: txt, fontSize: '0.875rem', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {profile.full_name ?? 'Sin nombre'}
-                    {!profile.active && <span className="ml-2 text-[10px] text-red-500 font-bold">INACTIVO</span>}
+                    {!profile.active && <span style={{ marginLeft: '0.5rem', fontSize: '0.625rem', color: '#EF4444', fontWeight: 700 }}>INACTIVO</span>}
                   </p>
-                  <p className="text-xs truncate" style={{ color: '#8B92AA' }}>{profile.email}</p>
+                  <p style={{ fontSize: '0.75rem', color: txtMut, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.email}</p>
                 </div>
-                <span className={`${roleCfg.color} text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0`}>
-                  {roleCfg.label}
-                </span>
+                {/* Role badge */}
+                <span className={`${roleCfg.color} text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0`}>{roleCfg.label}</span>
+                {/* Actions */}
                 {profile.role !== 'admin' && (
-                  <div className="flex gap-1.5">
+                  <div style={{ display: 'flex', gap: '0.3125rem' }}>
+                    {/* Edit role */}
                     <button onClick={() => { setEditingId(isEditing ? null : profile.id); setEditRole(profile.role) }}
-                      className="p-2 rounded-xl" style={{ color: '#5A617A', ...S.neoOutSm }} title="Cambiar rol">
-                      ✏️
-                    </button>
+                      style={{ padding: '0.375rem', borderRadius: '0.625rem', border: 'none', cursor: 'pointer', color: txtSec, backgroundColor: bg, fontSize: '0.875rem', ...S.outSm }}
+                      title="Cambiar rol">✏️</button>
+                    {/* Toggle active */}
                     <button onClick={() => handleToggleActive(profile)}
-                      className="p-2 rounded-xl" style={{ color: '#5A617A', ...S.neoOutSm }}
+                      style={{ padding: '0.375rem', borderRadius: '0.625rem', border: 'none', cursor: 'pointer', color: txtSec, backgroundColor: bg, fontSize: '0.875rem', ...S.outSm }}
                       title={profile.active ? 'Desactivar' : 'Activar'}>
                       {profile.active ? '🔒' : '🔓'}
                     </button>
+                    {/* Schedule */}
+                    <button onClick={() => setScheduleEmp({ id: profile.id, name: profile.full_name ?? 'Empleado' })}
+                      style={{ padding: '0.375rem', borderRadius: '0.625rem', border: 'none', cursor: 'pointer', color: txtSec, backgroundColor: bg, fontSize: '0.875rem', ...S.outSm }}
+                      title="Ver horario">📅</button>
+                    {/* Delete */}
+                    <button onClick={() => setConfirmDeleteId(profile.id)}
+                      style={{ padding: '0.375rem', borderRadius: '0.625rem', border: 'none', cursor: 'pointer', color: '#EF4444', backgroundColor: bg, fontSize: '0.875rem', ...S.outSm }}
+                      title="Eliminar empleado">🗑️</button>
                   </div>
                 )}
               </div>
+
+              {/* Role edit sub-panel */}
               <AnimatePresence>
                 {isEditing && (
-                  <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }}
-                    exit={{ opacity:0, height:0 }} transition={{ duration: 0.25 }} className="mt-3 overflow-hidden">
-                    <div className="grid grid-cols-2 gap-2">
-                      {(['waiter','kitchen','cashier','admin'] as Role[]).map(r => (
+                  <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
+                    style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: `1px solid ${bgSurf}` }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', marginBottom: '0.625rem' }}>
+                      {(['waiter', 'kitchen', 'cashier', 'admin'] as Role[]).map(r => (
                         <button key={r} onClick={() => setEditRole(r)}
-                          className="py-2 rounded-xl text-xs font-bold"
-                          style={editRole === r ? { background: '#FF5722', color: 'white', ...S.coral } : { backgroundColor: '#D8DAE4', color: '#5A617A', ...S.neoOutSm }}>
+                          style={{ padding: '0.5rem', borderRadius: '0.625rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', ...(editRole === r ? { backgroundColor: acc, color: '#fff', ...S.coral } : { backgroundColor: bg, color: txtSec, ...S.outSm }) }}>
                           {ROLE_CONFIG[r].emoji} {ROLE_CONFIG[r].label}
                         </button>
                       ))}
                     </div>
-                    <div className="flex gap-2 mt-3">
-                      <button onClick={() => setEditingId(null)} className="flex-1 py-2 rounded-xl text-xs font-bold"
-                        style={{ backgroundColor: '#D8DAE4', color: '#5A617A', ...S.neoOut }}>Cancelar</button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button onClick={() => setEditingId(null)}
+                        style={{ flex: 1, padding: '0.5rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.75rem', backgroundColor: bg, color: txtSec, ...S.out }}>
+                        Cancelar
+                      </button>
                       <button onClick={() => handleChangeRole(profile.id, editRole)}
-                        className="flex-1 py-2 rounded-xl text-xs font-bold text-white bg-[#FF5722]" style={S.coral}>
+                        style={{ flex: 1, padding: '0.5rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.75rem', backgroundColor: acc, color: '#fff', ...S.coral }}>
                         Guardar
                       </button>
                     </div>
@@ -439,62 +479,72 @@ export const TeamManager = memo(() => {
         })}
       </div>
 
-      {/* Modal: editar mi perfil */}
+      {/* ── My profile modal ── */}
       <AnimatePresence>
         {showEditMe && (
-          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setShowEditMe(false)}
-            style={{ position:'fixed', inset:0, zIndex:100, backgroundColor:'rgba(45,53,97,0.45)', backdropFilter:'blur(4px)', display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
-            <motion.div initial={{ scale:0.9, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.9, opacity:0 }}
-              transition={{ type:'spring', stiffness:400, damping:30 }}
+            style={{ position: 'fixed', inset: 0, zIndex: 100, backgroundColor: 'rgba(45,53,97,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', fontFamily: 'Nunito, sans-serif' }}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               onClick={e => e.stopPropagation()}
-              className="w-full max-w-sm rounded-3xl p-6" style={{ backgroundColor: '#D8DAE4', ...S.neoOut }}>
-              <h3 className="font-bold text-[#2D3561] text-lg mb-5" style={{ fontFamily: 'DM Sans, sans-serif' }}>✏️ Mi perfil</h3>
+              style={{ width: '100%', maxWidth: 420, maxHeight: '90vh', overflowY: 'auto', borderRadius: '1.75rem', padding: '1.5rem', backgroundColor: bg, ...S.out }}>
+              <h3 style={{ fontFamily: 'DM Sans, sans-serif', fontWeight: 700, color: txt, fontSize: '1.125rem', margin: '0 0 1.25rem' }}>✏️ Mi perfil</h3>
 
               {/* Avatar */}
-              <div className="flex items-center gap-4 mb-5">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem' }}>
                 <div onClick={() => meAvatarRef.current?.click()}
-                  className="w-20 h-20 rounded-2xl overflow-hidden shrink-0 cursor-pointer flex items-center justify-center"
-                  style={{ backgroundColor: '#CDD0DC', ...S.neoIn }}>
-                  {meAvatarPreview
-                    ? <img src={meAvatarPreview} alt="me" className="w-full h-full object-cover" />
-                    : <span className="text-3xl">👤</span>
-                  }
+                  style={{ width: 72, height: 72, borderRadius: '1.25rem', overflow: 'hidden', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: bgSurf, ...S.in }}>
+                  {meAvatarPreview ? <img src={meAvatarPreview} alt="me" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: '2rem' }}>👤</span>}
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-[#2D3561]">{myProfile?.full_name ?? 'Admin'}</p>
-                  <p className="text-xs" style={{ color: '#8B92AA' }}>{myProfile?.email}</p>
-                  <button onClick={() => meAvatarRef.current?.click()}
-                    className="text-xs font-bold mt-2" style={{ color: '#FF5722', background: 'none', border: 'none', cursor: 'pointer' }}>
-                    Cambiar foto
-                  </button>
+                  <p style={{ fontWeight: 700, color: txt, fontSize: '0.9375rem', margin: 0 }}>{myProfile?.full_name ?? 'Admin'}</p>
+                  <p style={{ fontSize: '0.75rem', color: txtMut, margin: '0.125rem 0 0.375rem' }}>{myProfile?.email}</p>
+                  <button onClick={() => meAvatarRef.current?.click()} style={{ fontSize: '0.75rem', fontWeight: 700, color: acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Cambiar foto</button>
                 </div>
-                <input ref={meAvatarRef} type="file" accept="image/*" className="sr-only"
-                  onChange={e => handleAvatarChange(e, true)} />
+                <input ref={meAvatarRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleAvatarChange(e, true)} />
               </div>
 
-              <div className="flex flex-col gap-4">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#8B92AA' }}>Nombre completo</label>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, marginBottom: '0.375rem' }}>Nombre completo</label>
                   <input value={myForm.full_name} onChange={e => setMyForm(p => ({ ...p, full_name: e.target.value }))}
-                    className="w-full rounded-xl px-4 py-3 text-sm outline-none"
-                    style={{ backgroundColor: '#CDD0DC', color: '#2D3561', ...S.neoIn }} />
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: 'none', outline: 'none', fontSize: '0.875rem', color: txt, backgroundColor: bgSurf, fontFamily: 'inherit', ...S.in, boxSizing: 'border-box' }} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#8B92AA' }}>Teléfono</label>
+                  <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, marginBottom: '0.375rem' }}>Teléfono</label>
                   <input type="tel" value={myForm.phone} onChange={e => setMyForm(p => ({ ...p, phone: e.target.value }))}
                     placeholder="+57 300 000 0000"
-                    className="w-full rounded-xl px-4 py-3 text-sm outline-none"
-                    style={{ backgroundColor: '#CDD0DC', color: '#2D3561', ...S.neoIn }} />
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: 'none', outline: 'none', fontSize: '0.875rem', color: txt, backgroundColor: bgSurf, fontFamily: 'inherit', ...S.in, boxSizing: 'border-box' }} />
+                </div>
+
+                {/* Separator */}
+                <div style={{ borderTop: `1px solid ${bgSurf}`, paddingTop: '0.875rem' }}>
+                  <p style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, margin: '0 0 0.75rem' }}>🔒 Cambiar credenciales (dejar en blanco para no cambiar)</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, marginBottom: '0.375rem' }}>Nuevo email de acceso</label>
+                      <input type="email" value={myForm.new_email} onChange={e => setMyForm(p => ({ ...p, new_email: e.target.value }))}
+                        placeholder="nuevo@email.com"
+                        style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: 'none', outline: 'none', fontSize: '0.875rem', color: txt, backgroundColor: bgSurf, fontFamily: 'inherit', ...S.in, boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: txtMut, marginBottom: '0.375rem' }}>Nueva contraseña</label>
+                      <input type="password" value={myForm.new_password} onChange={e => setMyForm(p => ({ ...p, new_password: e.target.value }))}
+                        placeholder="Mínimo 6 caracteres"
+                        style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: 'none', outline: 'none', fontSize: '0.875rem', color: txt, backgroundColor: bgSurf, fontFamily: 'inherit', ...S.in, boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-5">
-                <button onClick={() => setShowEditMe(false)} className="flex-1 py-3 rounded-2xl text-sm font-bold"
-                  style={{ backgroundColor: '#D8DAE4', color: '#5A617A', ...S.neoOut }}>Cancelar</button>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem' }}>
+                <button onClick={() => setShowEditMe(false)}
+                  style={{ flex: 1, padding: '0.75rem', borderRadius: '1rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.875rem', backgroundColor: bg, color: txtSec, ...S.out }}>
+                  Cancelar
+                </button>
                 <motion.button whileTap={{ scale: 0.97 }} onClick={handleSaveMe} disabled={savingMe}
-                  className={`flex-1 py-3 rounded-2xl text-sm font-bold text-white bg-[#FF5722] ${savingMe ? 'opacity-70' : ''}`}
-                  style={S.coral}>
+                  style={{ flex: 1, padding: '0.75rem', borderRadius: '1rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.875rem', backgroundColor: acc, color: '#fff', opacity: savingMe ? 0.7 : 1, ...S.coral }}>
                   {savingMe ? 'Guardando...' : '✅ Guardar'}
                 </motion.button>
               </div>
@@ -502,6 +552,49 @@ export const TeamManager = memo(() => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Confirm delete modal ── */}
+      <AnimatePresence>
+        {confirmDeleteId && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => !hardDeleting && setConfirmDeleteId(null)}
+            style={{ position: 'fixed', inset: 0, zIndex: 100, backgroundColor: 'rgba(45,53,97,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', fontFamily: 'Nunito, sans-serif' }}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 340, borderRadius: '1.75rem', padding: '1.5rem', backgroundColor: bg, ...S.out, textAlign: 'center' }}>
+              <p style={{ fontSize: '2.5rem', margin: '0 0 0.75rem' }}>⚠️</p>
+              <h3 style={{ fontFamily: 'DM Sans, sans-serif', fontWeight: 700, color: txt, fontSize: '1.0625rem', margin: '0 0 0.5rem' }}>¿Eliminar empleado?</h3>
+              <p style={{ fontSize: '0.8125rem', color: txtSec, margin: '0 0 1.25rem', lineHeight: 1.5 }}>
+                Se anonimizará su cuenta y se eliminarán sus turnos. Esta acción no se puede deshacer fácilmente.
+              </p>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button onClick={() => setConfirmDeleteId(null)} disabled={hardDeleting}
+                  style={{ flex: 1, padding: '0.75rem', borderRadius: '1rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.875rem', backgroundColor: bg, color: txtSec, ...S.out }}>
+                  Cancelar
+                </button>
+                <button onClick={() => handleHardDelete(confirmDeleteId)} disabled={hardDeleting}
+                  style={{ flex: 1, padding: '0.75rem', borderRadius: '1rem', border: 'none', cursor: hardDeleting ? 'wait' : 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.875rem', backgroundColor: '#EF4444', color: '#fff', boxShadow: '8px 8px 16px rgba(239,68,68,0.3),-4px -4px 12px rgba(255,255,255,0.4)', opacity: hardDeleting ? 0.7 : 1 }}>
+                  {hardDeleting ? 'Eliminando...' : '🗑️ Sí, eliminar'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Schedule calendar modal ── */}
+      <AnimatePresence>
+        {scheduleEmp && (
+          <ScheduleCalendar
+            employeeId={scheduleEmp.id}
+            employeeName={scheduleEmp.name}
+            onClose={() => setScheduleEmp(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 })

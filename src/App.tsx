@@ -3,6 +3,7 @@ import { supabase }  from './services/supabaseClient'
 import Login         from './pages/Login'
 import Dashboard     from './pages/Dashboard'
 import PublicMenu    from './pages/PublicMenu'
+import { ThemeProvider } from './contexts/ThemeContext'
 import type { Session } from '@supabase/supabase-js'
 
 const IS_PUBLIC_MENU = typeof window !== 'undefined' &&
@@ -81,8 +82,8 @@ export default function App() {
     // signOut dispara onAuthStateChange con session=null → setSession automático
   }, [])
 
-  if (IS_PUBLIC_MENU) return <PublicMenu />
+  if (IS_PUBLIC_MENU) return <ThemeProvider><PublicMenu /></ThemeProvider>
   if (!ready)         return <SplashScreen />
-  if (session)        return <Dashboard onLogout={handleLogout} />
+  if (session)        return <ThemeProvider><Dashboard onLogout={handleLogout} /></ThemeProvider>
   return <Login onLogin={() => { /* onAuthStateChange maneja el login */ }} />
 }

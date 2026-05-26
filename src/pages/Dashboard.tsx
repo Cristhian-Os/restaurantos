@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, memo, startTransition } from 'react'
 import { supabase } from '../services/supabaseClient'
+import { useTheme } from '../contexts/ThemeContext'
 import { initializeOfflineSync } from '../services/offlineService'
 import { pushNotificationService } from '../services/pushNotificationService'
 import Spin    from 'antd/es/spin'
@@ -51,10 +52,10 @@ interface Metrics {
 }
 
 const S = {
-  neoOut:   { boxShadow: '8px 8px 16px rgba(130,142,170,0.55),-8px -8px 16px rgba(255,255,255,0.55)' },
-  neoOutSm: { boxShadow: '4px 4px 10px rgba(130,142,170,0.5),-4px -4px 10px rgba(255,255,255,0.5)' },
-  neoIn:    { boxShadow: 'inset 5px 5px 10px rgba(130,142,170,0.5),inset -5px -5px 10px rgba(255,255,255,0.5)' },
-  coral:    { boxShadow: '8px 8px 16px rgba(255,87,34,0.32),-4px -4px 12px rgba(255,255,255,0.45)' },
+  neoOut:   { boxShadow: 'var(--shadow-out,   8px 8px 16px rgba(130,142,170,0.55),-8px -8px 16px rgba(255,255,255,0.55))' },
+  neoOutSm: { boxShadow: 'var(--shadow-out-sm,4px 4px 10px rgba(130,142,170,0.5),-4px -4px 10px rgba(255,255,255,0.5))' },
+  neoIn:    { boxShadow: 'var(--shadow-in,    inset 5px 5px 10px rgba(130,142,170,0.5),inset -5px -5px 10px rgba(255,255,255,0.5))' },
+  coral:    { boxShadow: 'var(--shadow-coral, 8px 8px 16px rgba(255,87,34,0.32),-4px -4px 12px rgba(255,255,255,0.45))' },
 } as const
 
 // Iconos SVG inline
@@ -136,10 +137,10 @@ const AdminDashboard = memo(({ profile, onNavigate }: {
   return (
     <div style={{display:'flex',flexDirection:'column',gap:'2rem'}}>
       <div>
-        <h2 style={{fontFamily:'"DM Sans",sans-serif',fontWeight:700,fontSize:'1.5rem',color:'#2D3561',marginBottom:'0.25rem'}}>
+        <h2 style={{fontFamily:'"DM Sans",sans-serif',fontWeight:700,fontSize:'1.5rem',color:'var(--text-primary,#2D3561)',marginBottom:'0.25rem'}}>
           Hola, {profile.full_name?.split(' ')[0]??'Admin'} 👋
         </h2>
-        <p style={{fontSize:'0.875rem',color:'#9CA3AF'}}>
+        <p style={{fontSize:'0.875rem',color:'var(--text-muted,#8B92AA)'}}>
           {new Date().toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'})}
         </p>
       </div>
@@ -149,15 +150,15 @@ const AdminDashboard = memo(({ profile, onNavigate }: {
       <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'1rem'}}>
         {cards.map((card,i) => (
           <button key={i} onClick={()=>onNavigate(card.nav)}
-            style={{padding:'1.25rem',backgroundColor:'#D8DAE4',borderRadius:'1.5rem',
-              textAlign:'left',border:'none',cursor:'pointer',fontFamily:'inherit',...S.neoOut}}
+            style={{padding:'1.25rem',backgroundColor:'var(--bg,#D8DAE4)',borderRadius:'1.5rem',
+              textAlign:'left',border:'none',cursor:'pointer',fontFamily:'inherit',...S.neoOut, transition:'transform 0.15s ease'}}
             onMouseEnter={e=>(e.currentTarget.style.transform='scale(1.02)')}
             onMouseLeave={e=>(e.currentTarget.style.transform='scale(1)')}>
             <div style={{fontSize:'1.875rem',marginBottom:'0.75rem'}}>{card.icon}</div>
             <div style={{fontFamily:'"DM Sans",sans-serif',fontWeight:700,fontSize:'1.5rem',color:card.color}}>
               {card.value}
             </div>
-            <div style={{fontSize:'0.75rem',color:'#9CA3AF',fontWeight:500,marginTop:'0.25rem'}}>
+            <div style={{fontSize:'0.75rem',color:'var(--text-muted,#8B92AA)',fontWeight:500,marginTop:'0.25rem'}}>
               {card.label}
             </div>
           </button>
@@ -183,6 +184,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [activeNav,  setActiveNav]  = useState<NavView>('dashboard')
   const [loading,    setLoading]    = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { theme, setTheme } = useTheme()
   useEffect(() => {
     try { initializeOfflineSync() } catch { /* no crítico */ }
     try { pushNotificationService.initializePushNotifications() } catch { /* no crítico */ }
@@ -254,7 +256,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         : null
       case 'orders':    return (
         <div>
-          <h2 style={{fontFamily:'"DM Sans",sans-serif',fontWeight:700,fontSize:'1.5rem',color:'#2D3561',marginBottom:'1rem'}}>
+          <h2 style={{fontFamily:'"DM Sans",sans-serif',fontWeight:700,fontSize:'1.5rem',color:'var(--text-primary,#2D3561)',marginBottom:'1rem'}}>
             📋 Nueva Orden
           </h2>
           <OrderFlow profile={profile} onOrderCreated={()=>message.success('Orden enviada a cocina')} />
@@ -280,7 +282,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }
 
   if (loading) return (
-    <div style={{minHeight:'100vh',backgroundColor:'#D8DAE4',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div style={{minHeight:'100vh',backgroundColor:'var(--bg,#D8DAE4)',display:'flex',alignItems:'center',justifyContent:'center'}}>
       <div style={{textAlign:'center'}}>
         <div style={{width:64,height:64,borderRadius:'1.5rem',overflow:'hidden',margin:'0 auto 1rem',...S.neoOut}}>
           <img src="/logo.jpg" alt="logo" style={{width:'100%',height:'100%',objectFit:'contain',display:'block'}} />
@@ -291,15 +293,15 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   )
 
   if (!loading && !profile) return (
-    <div style={{minHeight:'100vh',backgroundColor:'#D8DAE4',display:'flex',alignItems:'center',justifyContent:'center'}}>
-      <p style={{color:'#FF5722',fontWeight:700,fontFamily:'"Nunito",sans-serif'}}>Reiniciando sesión...</p>
+    <div style={{minHeight:'100vh',backgroundColor:'var(--bg,#D8DAE4)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <p style={{color:'var(--accent,#FF5722)',fontWeight:700,fontFamily:'"Nunito",sans-serif'}}>Reiniciando sesión...</p>
     </div>
   )
 
   const navItems = NAV_BY_ROLE[profile!.role] ?? NAV_BY_ROLE.client
 
   return (
-    <div style={{minHeight:'100vh',backgroundColor:'#D8DAE4',fontFamily:'"Nunito",sans-serif'}}>
+    <div style={{minHeight:'100vh',backgroundColor:'var(--bg,#D8DAE4)',fontFamily:'"Nunito",sans-serif'}}>
 
       {/* Notificaciones pedido listo — mesero y admin */}
       {(profile!.role === 'waiter' || profile!.role === 'admin') && (
@@ -308,7 +310,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
       {/* Header */}
       <header style={{
-        backgroundColor:'#D8DAE4', padding:'1rem 1.5rem',
+        backgroundColor:'var(--bg,#D8DAE4)', padding:'1rem 1.5rem',
         display:'flex', justifyContent:'space-between', alignItems:'center',
         position:'sticky', top:0, zIndex:20, ...S.neoOut,
       }}>
@@ -317,10 +319,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             <img src="/logo.jpg" alt="RestaurantOS" style={{width:'100%',height:'100%',objectFit:'contain',display:'block'}} />
           </div>
           <div>
-            <h1 style={{fontFamily:'"DM Sans",sans-serif',fontWeight:700,fontSize:'1.0625rem',color:'#2D3561',margin:0}}>
+            <h1 style={{fontFamily:'"DM Sans",sans-serif',fontWeight:700,fontSize:'1.0625rem',color:'var(--text-primary,#2D3561)',margin:0}}>
               RestaurantOS
             </h1>
-            <p style={{fontSize:'0.7rem',color:'#8B92AA',margin:0}}>
+            <p style={{fontSize:'0.7rem',color:'var(--text-muted,#8B92AA)',margin:0}}>
               {profile!.full_name ?? profile!.email} · {profile!.role}
             </p>
           </div>
@@ -328,16 +330,27 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
         <div style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
           <InstallPWA compact />
+          {/* Theme toggle — solo admin */}
+          {profile!.role === 'admin' && (
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              style={{padding:'0.625rem',backgroundColor:'var(--bg,#D8DAE4)',borderRadius:'0.75rem',
+                border:'none',color:'var(--text-secondary,#6B7280)',cursor:'pointer',display:'flex',alignItems:'center',
+                justifyContent:'center',fontSize:'1.0625rem',...S.neoOutSm}}
+              title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}>
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+          )}
           <button onClick={()=>setMobileOpen(p=>!p)}
-            style={{padding:'0.625rem',backgroundColor:'#D8DAE4',borderRadius:'0.75rem',
-              border:'none',color:'#6B7280',cursor:'pointer',display:'flex',alignItems:'center',
+            style={{padding:'0.625rem',backgroundColor:'var(--bg,#D8DAE4)',borderRadius:'0.75rem',
+              border:'none',color:'var(--text-secondary,#6B7280)',cursor:'pointer',display:'flex',alignItems:'center',
               justifyContent:'center',...S.neoOutSm}}
             aria-label="Menú">
             <Icons.Hamburger />
           </button>
           <button onClick={onLogout}
-            style={{padding:'0.625rem',backgroundColor:'#D8DAE4',borderRadius:'0.75rem',
-              border:'none',color:'#6B7280',cursor:'pointer',display:'flex',alignItems:'center',
+            style={{padding:'0.625rem',backgroundColor:'var(--bg,#D8DAE4)',borderRadius:'0.75rem',
+              border:'none',color:'var(--text-secondary,#6B7280)',cursor:'pointer',display:'flex',alignItems:'center',
               justifyContent:'center',...S.neoOutSm}}
             title="Cerrar sesión">
             <Icons.Logout />
@@ -350,10 +363,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         <div style={{position:'fixed',inset:0,zIndex:30,backgroundColor:'rgba(45,53,97,0.4)',
           backdropFilter:'blur(4px)'}} onClick={()=>setMobileOpen(false)}>
           <nav style={{position:'absolute',top:0,left:0,bottom:0,width:220,
-            backgroundColor:'#D8DAE4',padding:'1.5rem 1rem',display:'flex',
+            backgroundColor:'var(--bg,#D8DAE4)',padding:'1.5rem 1rem',display:'flex',
             flexDirection:'column',gap:'0.375rem',overflowY:'auto',...S.neoOut}}
             onClick={e=>e.stopPropagation()}>
-            <p style={{fontSize:'0.65rem',fontWeight:700,color:'#9CA3AF',textTransform:'uppercase',
+            <p style={{fontSize:'0.65rem',fontWeight:700,color:'var(--text-muted,#9CA3AF)',textTransform:'uppercase',
               letterSpacing:'0.1em',marginBottom:'0.75rem',paddingLeft:'0.5rem'}}>
               Navegación
             </p>
@@ -363,8 +376,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   borderRadius:'1rem',border:'none',cursor:'pointer',fontFamily:'inherit',
                   fontWeight:600,fontSize:'0.875rem',width:'100%',textAlign:'left',
                   ...(activeNav===view
-                    ? {backgroundColor:'#FF5722',color:'#fff',...S.coral}
-                    : {backgroundColor:'#D8DAE4',color:'#6B7280',...S.neoOutSm})}}>
+                    ? {backgroundColor:'var(--accent,#FF5722)',color:'#fff',...S.coral}
+                    : {backgroundColor:'var(--bg,#D8DAE4)',color:'var(--text-secondary,#6B7280)',...S.neoOutSm})}}>
                 {icon}{label}
               </button>
             ))}
@@ -375,7 +388,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       {/* Layout */}
       <div style={{display:'flex',alignItems:'flex-start'}}>
         {/* Sidebar desktop */}
-        <nav style={{width:80,backgroundColor:'#D8DAE4',flexDirection:'column',
+        <nav style={{width:80,backgroundColor:'var(--bg,#D8DAE4)',flexDirection:'column',
           alignItems:'center',padding:'1.5rem 0',gap:'0.5rem',
           position:'sticky',top:72,height:'calc(100vh - 72px)',
           overflowY:'auto',...S.neoOut,
@@ -387,8 +400,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',
                 gap:'0.25rem',fontFamily:'inherit',
                 ...(activeNav===view
-                  ? {backgroundColor:'#FF5722',color:'#fff',...S.coral}
-                  : {backgroundColor:'transparent',color:'#6B7280'})}}>
+                  ? {backgroundColor:'var(--accent,#FF5722)',color:'#fff',...S.coral}
+                  : {backgroundColor:'transparent',color:'var(--text-secondary,#6B7280)'})}}>
               {icon}
               <span style={{fontSize:'9px',fontWeight:700,lineHeight:1,textAlign:'center'}}>
                 {label}
