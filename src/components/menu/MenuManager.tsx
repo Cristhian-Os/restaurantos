@@ -31,7 +31,24 @@ const DEFAULT_CATEGORIES: Category[] = [
   { value: 'especial',  label: 'Especial',  emoji: '⭐' },
 ]
 
-const EMOJI_OPTIONS = ['🍕','🍔','🌮','🍣','🥗','🍰','🥤','☕','🍷','🥩','🍝','🥘','🍜','🥞','🧇','🍳','🥚','🥓','🌯','🥪','🍱','🧆','🧈','🫕','🫔','🍗','🍖','🥙','🫓','🥨','🧀','🥗','🫙','🍲','⭐','✨','🔥','💎','🏆','🎉','🎊','👑','💫']
+const EMOJI_OPTIONS = [
+  // 🥩 Carnes & Parrilla
+  '🥩','🍖','🍗','🥓','🌭','🍔','🌮','🥙','🫕','🥘','🍲','🫙','🥚','🍳','🧆','🧈',
+  // 🦀 Mariscos & Comida de Mar
+  '🍣','🦀','🦞','🦐','🦑','🐙','🍤','🐟','🍱','🥟','🍜','🍝','🍚','🍛',
+  // 🍰 Postres & Heladería
+  '🍰','🎂','🧁','🍮','🍭','🍬','🍫','🍩','🍪','🥞','🧇','🍡','🍦','🍧','🍨','🍿','🍯',
+  // 🍕 Comida Rápida
+  '🍕','🍟','🫓','🥨','🧀','🥪','🌯','🫔',
+  // 🥗 Fit & Saludable
+  '🥗','🥦','🥕','🥑','🫑','🌽','🥒','🧄','🧅','🫛','🥬','🌿','🍃','🫚','🫘',
+  // 🍎 Frutas
+  '🍎','🍊','🍋','🍇','🍓','🍒','🍑','🥭','🍍','🥥','🍌','🍐','🍈','🍉','🫐','🍅','🥝','🫒','🍆',
+  // ☕ Bebidas & Cafetería
+  '☕','🍵','🧃','🥤','🍷','🍸','🍹','🍺','🥂','🍾','🧋','🫖','🍶','🥛','🧉',
+  // ⭐ Especiales & Comodines
+  '⭐','✨','🔥','💎','🏆','🎉','👑','💫','🎊','🌟','🍽️',
+]
 
 interface DishForm {
   name:          string
@@ -109,16 +126,16 @@ function EmojiPortal({ anchorRef, onSelect, onClose }: EmojiPortalProps) {
       style={{
         position: 'absolute',
         top: pos.top,
-        left: Math.min(pos.left, window.innerWidth - 260),
+        left: Math.min(pos.left, window.innerWidth - 320),
         zIndex: 99999,
         backgroundColor: 'var(--bg, #D8DAE4)',
         borderRadius: '1rem',
         padding: '0.75rem',
         display: 'grid',
-        gridTemplateColumns: 'repeat(8, 1fr)',
-        gap: '0.25rem',
-        width: 256,
-        maxHeight: 200,
+        gridTemplateColumns: 'repeat(10, 1fr)',
+        gap: '0.2rem',
+        width: 320,
+        maxHeight: 280,
         overflowY: 'auto',
         boxShadow: 'var(--shadow-out)',
         border: '1px solid var(--glass-border, rgba(255,255,255,0.5))',
@@ -591,15 +608,15 @@ export const MenuManager = memo(() => {
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: txt }} />
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           <button onClick={() => setFilterCat('all')}
-            className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold"
+            className="shrink-0 whitespace-nowrap px-3 py-1.5 rounded-xl text-xs font-bold"
             style={filterCat === 'all' ? { background: acc, color: '#fff', ...S.coral } : { backgroundColor: bg, color: txtMid, ...S.neoOutSm }}>
             Todos
           </button>
           {categories.map(c => (
             <button key={c.value} onClick={() => setFilterCat(c.value)}
-              className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold"
+              className="shrink-0 whitespace-nowrap px-3 py-1.5 rounded-xl text-xs font-bold"
               style={filterCat === c.value ? { background: acc, color: '#fff', ...S.coral } : { backgroundColor: bg, color: txtMid, ...S.neoOutSm }}>
               {c.emoji} {c.label}
             </button>
@@ -691,11 +708,12 @@ export const MenuManager = memo(() => {
                   <div className="grid grid-cols-5 gap-2">
                     {categories.map(c => (
                       <button key={c.value} onClick={() => setForm(p => ({ ...p, category: c.value }))}
-                        className="py-2.5 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-all"
+                        className="py-2.5 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-all w-full"
                         style={form.category === c.value
                           ? { background: acc, color: 'white', ...S.coral }
                           : { backgroundColor: bg, color: txtMid, ...S.neoOutSm }}>
-                        <span>{c.emoji}</span><span>{c.label}</span>
+                        <span className="text-base leading-none">{c.emoji}</span>
+                        <span className="truncate w-full text-center text-[10px]">{c.label}</span>
                       </button>
                     ))}
                   </div>

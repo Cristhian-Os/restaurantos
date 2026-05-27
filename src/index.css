@@ -33,6 +33,7 @@
   --shadow-in-sm:  inset 3px 3px 6px rgba(130,142,170,0.45),  inset -3px -3px 6px rgba(255,255,255,0.45);
   --shadow-coral:  8px 8px 16px rgba(255,87,34,0.32),  -4px -4px 12px rgba(255,255,255,0.45);
   --shadow-green:  8px 8px 16px rgba(16,185,129,0.28), -4px -4px 12px rgba(255,255,255,0.45);
+  --shadow-amber:  8px 8px 16px rgba(245,158,11,0.30), -4px -4px 12px rgba(255,255,255,0.60);
 
   /* Glass system */
   --glass-bg:         rgba(228, 230, 240, 0.78);
@@ -88,6 +89,7 @@
   --shadow-in-sm:  inset 3px 3px 8px rgba(0,0,0,0.55),  inset -2px -2px 4px rgba(40,55,100,0.10);
   --shadow-coral:  8px 8px 20px rgba(255,104,53,0.40), -4px -4px 12px rgba(40,55,100,0.18);
   --shadow-green:  8px 8px 20px rgba(16,185,129,0.32), -4px -4px 12px rgba(40,55,100,0.15);
+  --shadow-amber:  8px 8px 20px rgba(245,158,11,0.40), -4px -4px 12px rgba(40,55,100,0.18);
 
   /* Glass system — dark: visible panels with subtle border */
   --glass-bg:         rgba(22,  26,  40,  0.90);
@@ -380,3 +382,90 @@
 
 /* ── Desktop sidebar show ────────────────────────────────── */
 @media (min-width: 1024px) { .lg-sidebar { display: flex !important; } }
+
+/* ══════════════════════════════════════════════════════════
+   DARK MODE — Neumorphic legacy component overrides
+   Covers: KitchenBoard · CashierPanel · OrderFlow · AdminTasksView
+   Strategy: override hardcoded Tailwind arbitrary-value classes
+   that can't be reached by CSS-var references in className.
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Card & container backgrounds ──────────────────────── */
+[data-theme="dark"] .bg-\[\#D8DAE4\] {
+  background-color: var(--bg-raised) !important;  /* #1C2130 */
+}
+[data-theme="dark"] .bg-\[\#CDD0DC\] {
+  background-color: var(--bg-surface) !important; /* #161923 */
+}
+
+/* ── Text colors ────────────────────────────────────────── */
+[data-theme="dark"] .text-\[\#2D3561\] {
+  color: var(--text-primary) !important;   /* #E2E5F4 */
+}
+[data-theme="dark"] .text-\[\#6B7280\] {
+  color: var(--text-secondary) !important; /* #A0A8C0 */
+}
+[data-theme="dark"] .text-\[\#9CA3AF\] {
+  color: var(--text-muted) !important;     /* #6B7280 */
+}
+
+/* ── Borders ────────────────────────────────────────────── */
+[data-theme="dark"] .border-\[\#D1D5E0\] {
+  border-color: var(--divider) !important; /* rgba(255,255,255,0.08) */
+}
+
+/* ── Kanban column backgrounds (KitchenBoard) ───────────── */
+[data-theme="dark"] .bg-amber-50   { background-color: rgba(245, 158,  11, 0.10) !important; }
+[data-theme="dark"] .bg-blue-50    { background-color: rgba( 59, 130, 246, 0.10) !important; }
+[data-theme="dark"] .bg-emerald-50 { background-color: rgba( 16, 185, 129, 0.10) !important; }
+[data-theme="dark"] .bg-red-50     { background-color: rgba(239,  68,  68, 0.10) !important; }
+
+/* ── Kanban column borders ──────────────────────────────── */
+[data-theme="dark"] .border-amber-200   { border-color: rgba(245, 158,  11, 0.28) !important; }
+[data-theme="dark"] .border-blue-200    { border-color: rgba( 59, 130, 246, 0.28) !important; }
+[data-theme="dark"] .border-emerald-200 { border-color: rgba( 16, 185, 129, 0.28) !important; }
+[data-theme="dark"] .border-red-200     { border-color: rgba(239,  68,  68, 0.28) !important; }
+
+/* ── Semantic text on those kanban columns ──────────────── */
+[data-theme="dark"] .text-amber-600   { color: #FCD34D !important; }
+[data-theme="dark"] .text-blue-600    { color: #93C5FD !important; }
+[data-theme="dark"] .text-emerald-600 { color: #6EE7B7 !important; }
+[data-theme="dark"] .text-emerald-700 { color: #6EE7B7 !important; }
+[data-theme="dark"] .text-blue-700    { color: #93C5FD !important; }
+
+/* ── White badge background (count chip in KitchenBoard) ── */
+[data-theme="dark"] .bg-white {
+  background-color: var(--bg-raised) !important;
+}
+
+/* ── Inline bg fallbacks: inputs / textareas / selects ─── */
+/* These use bg-[#CDD0DC] already handled above,            */
+/* but also ensure text is readable inside inputs.          */
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  color-scheme: dark;
+}
+
+/* ── Cashier modal: cambio / transferencia info blocks ──── */
+[data-theme="dark"] .text-emerald-600,
+[data-theme="dark"] .text-emerald-700 { color: #6EE7B7 !important; }
+[data-theme="dark"] .text-blue-600,
+[data-theme="dark"] .text-blue-700    { color: #93C5FD !important; }
+
+/* ── Occupied-table button (OrderFlow) — inline bg fix ──── */
+[data-theme="dark"] .bg-\[\#FEE2E2\] {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+/* ── Status badge text inside neumorphic cards ──────────── */
+[data-theme="dark"] .text-amber-700   { color: #FDE68A !important; }
+[data-theme="dark"] .text-blue-700    { color: #BFDBFE !important; }
+[data-theme="dark"] .text-red-500     { color: #FCA5A5 !important; }
+[data-theme="dark"] .text-red-600     { color: #FCA5A5 !important; }
+
+/* ── Offline banner (OrderFlow) ─────────────────────────── */
+[data-theme="dark"] .bg-amber-50.border.border-amber-200 {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+  border-color:     rgba(245, 158, 11, 0.30) !important;
+}

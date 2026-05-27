@@ -13,12 +13,12 @@ import { supabase } from '../../services/supabaseClient'
 import message from 'antd/es/message'
 
 const S = {
-  neoOut:  { boxShadow: '8px 8px 16px rgba(130,142,170,0.55),-8px -8px 16px rgba(255,255,255,0.55)' },
-  neoOutSm:{ boxShadow: '4px 4px 10px rgba(130,142,170,0.5),-4px -4px 10px rgba(255,255,255,0.5)' },
-  neoIn:   { boxShadow: 'inset 5px 5px 10px rgba(130,142,170,0.5),inset -5px -5px 10px rgba(255,255,255,0.5)' },
-  coral:   { boxShadow: '8px 8px 16px rgba(255,87,34,0.32),-4px -4px 12px rgba(255,255,255,0.45)' },
-  amber:   { boxShadow: '8px 8px 16px rgba(245,158,11,0.3),-4px -4px 12px rgba(255,255,255,0.6)' },
-  green:   { boxShadow: '8px 8px 16px rgba(16,185,129,0.28),-4px -4px 12px rgba(255,255,255,0.45)' },
+  neoOut:  { boxShadow: 'var(--shadow-out)' },
+  neoOutSm:{ boxShadow: 'var(--shadow-out-sm)' },
+  neoIn:   { boxShadow: 'var(--shadow-in)' },
+  coral:   { boxShadow: 'var(--shadow-coral)' },
+  amber:   { boxShadow: 'var(--shadow-amber)' },
+  green:   { boxShadow: 'var(--shadow-green)' },
 } as const
 
 interface OrderItem { id: string; name: string; price: number; quantity: number; notes?: string }

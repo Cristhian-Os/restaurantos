@@ -19,11 +19,11 @@ import type { Profile } from '../../pages/Dashboard'
 
 // ─── Estilos neomórficos ──────────────────────────────────────
 const S = {
-  neoOut:  { boxShadow: '8px 8px 16px rgba(130,142,170,0.55),-8px -8px 16px rgba(255,255,255,0.55)' },
-  neoOutSm:{ boxShadow: '4px 4px 10px rgba(130,142,170,0.5),-4px -4px 10px rgba(255,255,255,0.5)' },
-  neoIn:   { boxShadow: 'inset 5px 5px 10px rgba(130,142,170,0.5),inset -5px -5px 10px rgba(255,255,255,0.5)' },
-  coral:   { boxShadow: '8px 8px 16px rgba(255,87,34,0.32),-4px -4px 12px rgba(255,255,255,0.45)' },
-  green:   { boxShadow: '8px 8px 16px rgba(16,185,129,0.28),-4px -4px 12px rgba(255,255,255,0.45)' },
+  neoOut:  { boxShadow: 'var(--shadow-out)' },
+  neoOutSm:{ boxShadow: 'var(--shadow-out-sm)' },
+  neoIn:   { boxShadow: 'var(--shadow-in)' },
+  coral:   { boxShadow: 'var(--shadow-coral)' },
+  green:   { boxShadow: 'var(--shadow-green)' },
 } as const
 
 const EASE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94]
